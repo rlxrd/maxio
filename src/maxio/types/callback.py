@@ -13,18 +13,7 @@ if TYPE_CHECKING:
 
 
 class Callback(BaseModel):
-    """Сырой объект callback из апдейта (без исходного сообщения)."""
-
-    model_config = ConfigDict(populate_by_name=True, extra="allow")
-
-    callback_id: str
-    timestamp: int | None = None
-    payload: str | None = None
-    user: User | None = None
-
-
-class CallbackQuery(BaseModel):
-    """Нажатие inline-кнопки. Объединяет данные `Callback` и исходное сообщение."""
+    """Нажатие inline-кнопки. Содержит данные нажатия и исходное сообщение."""
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 

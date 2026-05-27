@@ -1,15 +1,7 @@
-"""Пример эхо-бота на maxio.
-
-Запуск:
-    MAX_TOKEN=<ваш токен от @MasterBot> python examples/echo_bot.py
-"""
-
-from __future__ import annotations
-
 import logging
 import os
 
-from maxio import Bot, CallbackQuery, Command, InlineKeyboard, MaxBot, Message
+from maxio import Bot, Callback, Command, InlineKeyboard, MaxBot, Message, Update
 from maxio.keyboards import Button
 
 logging.basicConfig(level=logging.INFO)
@@ -17,18 +9,27 @@ logging.basicConfig(level=logging.INFO)
 app = MaxBot(os.environ["MAX_TOKEN"])
 
 
-@app.message(Command("start"))
-async def start(message: Message, bot: Bot) -> None:
+# Синяя кнопка Start шлёт отдельное событие bot_started (без message), а не /start.
+@app.bot_started()
+async def on_bot_started(update: Update, bot: Bot) -> None:
     keyboard = InlineKeyboard().row(Button.callback("Пинг", "ping"))
-    await message.answer(
-        f"Привет, {message.from_user.full_name if message.from_user else 'друг'}!",
+    await bot.send_message(
+        f"Привет, {update.user.full_name if update.user else 'друг'}!",
+        chat_id=update.chat_id,
         keyboard=keyboard,
     )
 
 
+@app.message(Command("help"))
+async def help_cmd(message: Message) -> None:
+    await message.answer("Это бот на фреймворке maxio!")
+
+
 @app.callback()
-async def on_ping(query: CallbackQuery) -> None:
-    await query.answer(notification="Понг!")
+async def on_ping(callback: Callback) -> None:
+    await callback.answer(notification="Понг!")          # всплывашка на кнопке
+    if callback.message:                                 # + новое сообщение в тот же чат
+        await callback.message.answer("Ты нажал кнопку!")
 
 
 @app.message()

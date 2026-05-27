@@ -30,6 +30,10 @@ __pycache__/
 CLAUDE.md
 .claude/
 
+# Черновые changelog-файлы
+chlog_*
+ch0*.md
+
 # macOS
 .DS_Store
 

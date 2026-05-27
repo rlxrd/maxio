@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from maxio.bot import Bot
 
 # Текущий Bot активного апдейта. Диспетчер выставляет его перед вызовом хэндлера,
-# чтобы методы-сахар (Message.answer, CallbackQuery.answer) работали без явной передачи бота.
+# чтобы методы-сахар (Message.answer, Callback.answer) работали без явной передачи бота.
 current_bot: ContextVar[Bot] = ContextVar("current_bot")
 
 

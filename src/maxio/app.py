@@ -11,7 +11,7 @@ from maxio.bot import Bot
 from maxio.enums import UpdateType
 from maxio.filters import Filter, FilterFunc, apply_filter
 from maxio.injection import resolve_kwargs
-from maxio.types.callback import CallbackQuery
+from maxio.types.callback import Callback
 from maxio.types.chat import Chat
 from maxio.types.message import Message
 from maxio.types.update import Update
@@ -30,7 +30,7 @@ class _Registration:
 
 
 class MaxBot:
-    """Приложение-бот в стиле FastAPI: хэндлеры регистрируются декораторами,
+    """Приложение-бот: хэндлеры регистрируются декораторами,
     а их аргументы внедряются по аннотациям типов."""
 
     def __init__(self, token: str, **bot_kwargs: Any) -> None:
@@ -63,7 +63,7 @@ class MaxBot:
     def callback(self, *filters: Filter | FilterFunc) -> Callable[[Handler], Handler]:
         return self._register((UpdateType.MESSAGE_CALLBACK.value,), filters)
 
-    def startup(self, *filters: Filter | FilterFunc) -> Callable[[Handler], Handler]:
+    def bot_started(self, *filters: Filter | FilterFunc) -> Callable[[Handler], Handler]:
         return self._register((UpdateType.BOT_STARTED.value,), filters)
 
     def event(
@@ -83,13 +83,8 @@ class MaxBot:
             if update.message.sender is not None:
                 ctx[User] = update.message.sender
         if update.callback is not None:
-            ctx[CallbackQuery] = CallbackQuery(
-                callback_id=update.callback.callback_id,
-                timestamp=update.callback.timestamp,
-                payload=update.callback.payload,
-                user=update.callback.user,
-                message=update.message,
-            )
+            update.callback.message = update.message
+            ctx[Callback] = update.callback
             if update.callback.user is not None:
                 ctx[User] = update.callback.user
         if update.user is not None:

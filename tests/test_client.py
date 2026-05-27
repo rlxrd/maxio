@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import httpx
 import pytest
@@ -8,6 +9,7 @@ import respx
 
 from conftest import message_payload
 from maxio import Bot, InlineKeyboard, MaxApiError
+from maxio._logging import TokenMaskingFilter
 from maxio.keyboards import Button
 
 
@@ -46,6 +48,32 @@ async def test_send_message_with_keyboard() -> None:
     assert body["attachments"][0]["type"] == "inline_keyboard"
     assert body["attachments"][0]["payload"]["buttons"][0][0]["payload"] == "x"
     await bot.aclose()
+
+
+def _make_record(msg: str, *args: object) -> logging.LogRecord:
+    return logging.LogRecord("httpx", logging.INFO, __file__, 0, msg, args, None)
+
+
+def test_token_masking_filter_hides_token_in_url() -> None:
+    flt = TokenMaskingFilter()
+    record = _make_record(
+        'HTTP Request: GET %s "%s"',
+        "https://botapi.max.ru/updates?access_token=SECRET&limit=100",
+        "HTTP/1.1 200 OK",
+    )
+    flt.filter(record)
+    rendered = record.getMessage()
+    assert "SECRET" not in rendered
+    assert "access_token=***" in rendered
+
+
+def test_token_masking_filter_hides_authorization() -> None:
+    flt = TokenMaskingFilter()
+    record = _make_record("headers: Authorization: SECRET, host: x")
+    flt.filter(record)
+    rendered = record.getMessage()
+    assert "SECRET" not in rendered
+    assert "Authorization: ***" in rendered
 
 
 async def test_send_message_requires_target() -> None:

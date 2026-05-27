@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from maxio.types.attachment import Attachment
-from maxio.types.callback import Callback, CallbackQuery
+from maxio.types.callback import Callback
 from maxio.types.chat import Chat, Image
 from maxio.types.message import (
     LinkedMessage,
@@ -19,7 +19,6 @@ __all__ = [
     "Attachment",
     "BotInfo",
     "Callback",
-    "CallbackQuery",
     "Chat",
     "Image",
     "LinkedMessage",

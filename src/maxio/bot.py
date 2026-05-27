@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 
+from maxio._logging import install_token_masking
 from maxio.enums import TextFormat
 from maxio.exceptions import MaxApiError
 from maxio.keyboards import InlineKeyboard
@@ -61,8 +62,11 @@ class Bot:
         base_url: str = DEFAULT_BASE_URL,
         timeout: float = 100.0,
         client: httpx.AsyncClient | None = None,
+        mask_token_in_logs: bool = True,
     ) -> None:
         self.token = token
+        if mask_token_in_logs:
+            install_token_masking()
         self._client = client or httpx.AsyncClient(
             base_url=base_url,
             timeout=timeout,
