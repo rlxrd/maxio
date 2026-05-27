@@ -1,0 +1,40 @@
+# Виртуальные окружения
+.venv/
+venv/
+env/
+
+# Сборочные артефакты
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Кеши Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Инструменты
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Секреты и локальные настройки
+.env
+.env.*
+*.token
+
+# ИИ-агент (не для публики)
+CLAUDE.md
+.claude/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
