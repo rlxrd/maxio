@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from maxio.types.attachment import Attachment
+from maxio.types.attachment import (
+    Attachment,
+    AudioAttachmentPayload,
+    FileAttachmentPayload,
+    PhotoAttachmentPayload,
+    VideoAttachmentPayload,
+)
 from maxio.types.callback import Callback
 from maxio.types.chat import Chat, Image
 from maxio.types.message import (
@@ -17,6 +23,10 @@ from maxio.types.user import BotInfo, User
 
 __all__ = [
     "Attachment",
+    "PhotoAttachmentPayload",
+    "VideoAttachmentPayload",
+    "AudioAttachmentPayload",
+    "FileAttachmentPayload",
     "BotInfo",
     "Callback",
     "Chat",

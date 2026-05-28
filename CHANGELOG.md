@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-05-28
+
+### Добавлено
+- **Роутеры** (`Router`): разбивка хэндлеров по файлам через `app.include_routers(r1, r2, ...)`.
+  `MaxBot` наследует `Router` — API одинаков на обоих уровнях.
+- **Middleware** (outer / inner, instance-based): `outer_middleware(mw)` / `inner_middleware(mw)`
+  на `MaxBot` или `Router`. Middleware — callable-объект или функция, не декоратор.
+  Порядок: `app.outer → router.outer → app.inner → router.inner → handler`.
+- **FSM** (`src/maxio/fsm/`): `StatesGroup`, `State`, `FSMContext`, `StateFilter`, `MemoryStorage`.
+  `FSMContext` инжектируется в хэндлер по аннотации типа; `StateFilter` — обычный фильтр.
+  По умолчанию используется `MemoryStorage`; хранилище подключается через `MaxBot(storage=...)`.
+- **Медиа**: `Bot.upload(file, UploadType.IMAGE | VIDEO | AUDIO | FILE)` → токен.
+  Фабрики `media.image/video/audio/file(token)` для параметра `attachments`.
+  `Message.photos`, `.videos`, `.audio`, `.files` — типизированные payload-объекты входящих вложений.
+  `HasMedia(*types)` — фильтр по типу вложения.
+
 ## [0.2.0] — 2026-05-27
 
 ### Безопасность
@@ -35,6 +51,7 @@
 - Сахар на моделях: `Message.answer()`, `Message.reply()`, `CallbackQuery.answer()`
 - Pydantic v2, `py.typed`, совместимость с `mypy --strict`
 
-[Unreleased]: https://github.com/rlxrd/maxio/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/rlxrd/maxio/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/rlxrd/maxio/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/rlxrd/maxio/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/rlxrd/maxio/releases/tag/v0.1.0

@@ -7,7 +7,7 @@ import pytest
 import respx
 
 from conftest import message_callback, message_created
-from maxio import Bot, Callback, CallbackPayload, Command, MaxBot, Message, Update
+from maxio import Bot, Callback, CallbackPayload, Command, MaxBot, Message, Router, Update
 from maxio.exceptions import MaxError
 
 
@@ -93,6 +93,82 @@ async def test_callback_dispatch_and_answer() -> None:
     request = route.calls.last.request
     assert request.url.params["callback_id"] == "cb-1"
     assert json.loads(request.content)["notification"] == "pong"
+    await app.bot.aclose()
+
+
+async def test_router_handles_after_app() -> None:
+    app = MaxBot("TOKEN")
+    router = Router()
+    app.include_routers(router)
+    calls: list[str] = []
+
+    @router.message()
+    async def handler(message: Message) -> None:
+        calls.append("router")
+
+    handled = await app.feed_update(Update.model_validate(message_created()))
+
+    assert handled is True
+    assert calls == ["router"]
+    await app.bot.aclose()
+
+
+async def test_app_takes_priority_over_router() -> None:
+    app = MaxBot("TOKEN")
+    router = Router()
+    app.include_routers(router)
+    calls: list[str] = []
+
+    @app.message()
+    async def app_handler(message: Message) -> None:
+        calls.append("app")
+
+    @router.message()
+    async def router_handler(message: Message) -> None:
+        calls.append("router")
+
+    await app.feed_update(Update.model_validate(message_created()))
+
+    assert calls == ["app"]
+    await app.bot.aclose()
+
+
+async def test_routers_checked_in_order() -> None:
+    app = MaxBot("TOKEN")
+    first = Router()
+    second = Router()
+    app.include_routers(first, second)
+    calls: list[str] = []
+
+    @first.message()
+    async def first_handler(message: Message) -> None:
+        calls.append("first")
+
+    @second.message()
+    async def second_handler(message: Message) -> None:
+        calls.append("second")
+
+    await app.feed_update(Update.model_validate(message_created()))
+
+    assert calls == ["first"]
+    await app.bot.aclose()
+
+
+async def test_router_registers_before_include() -> None:
+    """Хэндлеры, добавленные в роутер после include_routers, всё равно работают."""
+    app = MaxBot("TOKEN")
+    router = Router()
+    app.include_routers(router)
+    calls: list[str] = []
+
+    @router.message()
+    async def handler(message: Message) -> None:
+        calls.append("late")
+
+    handled = await app.feed_update(Update.model_validate(message_created()))
+
+    assert handled is True
+    assert calls == ["late"]
     await app.bot.aclose()
 
 

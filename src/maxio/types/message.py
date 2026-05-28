@@ -5,7 +5,13 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict
 
 from maxio.enums import ChatType, MessageLinkType, TextFormat
-from maxio.types.attachment import Attachment
+from maxio.types.attachment import (
+    Attachment,
+    AudioAttachmentPayload,
+    FileAttachmentPayload,
+    PhotoAttachmentPayload,
+    VideoAttachmentPayload,
+)
 from maxio.types.user import User
 
 if TYPE_CHECKING:
@@ -60,6 +66,26 @@ class Message(BaseModel):
     @property
     def mid(self) -> str | None:
         return self.body.mid if self.body else None
+
+    @property
+    def attachments(self) -> list[Attachment]:
+        return self.body.attachments or [] if self.body else []
+
+    @property
+    def photos(self) -> list[PhotoAttachmentPayload]:
+        return [p for a in self.attachments if (p := a.as_image()) is not None]
+
+    @property
+    def videos(self) -> list[VideoAttachmentPayload]:
+        return [p for a in self.attachments if (p := a.as_video()) is not None]
+
+    @property
+    def audio(self) -> list[AudioAttachmentPayload]:
+        return [p for a in self.attachments if (p := a.as_audio()) is not None]
+
+    @property
+    def files(self) -> list[FileAttachmentPayload]:
+        return [p for a in self.attachments if (p := a.as_file()) is not None]
 
     @property
     def chat_id(self) -> int | None:

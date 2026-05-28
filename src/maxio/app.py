@@ -2,15 +2,22 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from typing import Any
 
 from maxio._runtime import current_bot
 from maxio.bot import Bot
-from maxio.enums import UpdateType
 from maxio.filters import Filter, FilterFunc, apply_filter
+from maxio.fsm.context import FSMContext, current_fsm_context
+from maxio.fsm.storage import BaseStorage, MemoryStorage, StorageKey
 from maxio.injection import resolve_kwargs
+from maxio.middleware import (
+    CallNextInner,
+    CallNextOuter,
+    Handler,
+    InnerMiddlewareFn,
+    OuterMiddlewareFn,
+)
+from maxio.router import Router, _Registration
 from maxio.types.callback import Callback
 from maxio.types.chat import Chat
 from maxio.types.message import Message
@@ -19,60 +26,48 @@ from maxio.types.user import BotInfo, User
 
 logger = logging.getLogger("maxio")
 
-Handler = Callable[..., Awaitable[Any]]
+
+def _storage_key(update: Update) -> StorageKey | None:
+    user_id: int | None = None
+    # update.chat_id заполняется для событий уровня чата (bot_added/removed/etc.)
+    # для message* chat_id живёт в message.recipient.chat_id
+    chat_id: int | None = update.chat_id
+    if update.message is not None:
+        if update.message.sender is not None:
+            user_id = update.message.sender.user_id
+        if chat_id is None:
+            chat_id = update.message.recipient.chat_id
+    elif update.callback is not None and update.callback.user is not None:
+        user_id = update.callback.user.user_id
+        if chat_id is None and update.message is not None:
+            chat_id = update.message.recipient.chat_id
+    elif update.user is not None:
+        user_id = update.user.user_id
+    if user_id is None:
+        return None
+    return StorageKey(user_id=user_id, chat_id=chat_id)
 
 
-@dataclass(slots=True)
-class _Registration:
-    update_types: frozenset[str]
-    filters: tuple[Filter | FilterFunc, ...]
-    fn: Handler
-
-
-class MaxBot:
+class MaxBot(Router):
     """Приложение-бот: хэндлеры регистрируются декораторами,
     а их аргументы внедряются по аннотациям типов."""
 
-    def __init__(self, token: str, **bot_kwargs: Any) -> None:
+    def __init__(
+        self,
+        token: str,
+        storage: BaseStorage | None = None,
+        **bot_kwargs: Any,
+    ) -> None:
+        super().__init__()
         self.bot = Bot(token, **bot_kwargs)
-        self._handlers: list[_Registration] = []
+        self._storage: BaseStorage = storage if storage is not None else MemoryStorage()
+        self._routers: list[Router] = []
         self._running = False
         self.me: BotInfo | None = None
 
-    # --- регистрация хэндлеров ---
-
-    def _register(
-        self,
-        update_types: tuple[str, ...],
-        filters: tuple[Filter | FilterFunc, ...],
-    ) -> Callable[[Handler], Handler]:
-        def decorator(fn: Handler) -> Handler:
-            self._handlers.append(
-                _Registration(frozenset(str(t) for t in update_types), filters, fn)
-            )
-            return fn
-
-        return decorator
-
-    def message(self, *filters: Filter | FilterFunc) -> Callable[[Handler], Handler]:
-        return self._register((UpdateType.MESSAGE_CREATED.value,), filters)
-
-    def message_edited(self, *filters: Filter | FilterFunc) -> Callable[[Handler], Handler]:
-        return self._register((UpdateType.MESSAGE_EDITED.value,), filters)
-
-    def callback(self, *filters: Filter | FilterFunc) -> Callable[[Handler], Handler]:
-        return self._register((UpdateType.MESSAGE_CALLBACK.value,), filters)
-
-    def bot_started(self, *filters: Filter | FilterFunc) -> Callable[[Handler], Handler]:
-        return self._register((UpdateType.BOT_STARTED.value,), filters)
-
-    def event(
-        self,
-        *update_types: str,
-        filters: tuple[Filter | FilterFunc, ...] = (),
-    ) -> Callable[[Handler], Handler]:
-        """Подписка на произвольные типы событий. Без аргументов ловит любые апдейты."""
-        return self._register(tuple(str(t) for t in update_types), filters)
+    def include_routers(self, *routers: Router) -> None:
+        """Подключить роутеры. Хэндлеры app проверяются первыми, затем роутеры по порядку."""
+        self._routers.extend(routers)
 
     # --- диспетчеризация ---
 
@@ -91,6 +86,9 @@ class MaxBot:
             ctx[User] = update.user
         if update.chat is not None:
             ctx[Chat] = update.chat
+        key = _storage_key(update)
+        if key is not None:
+            ctx[FSMContext] = FSMContext(self._storage, key)
         return ctx
 
     async def _passes_filters(
@@ -103,22 +101,102 @@ class MaxBot:
                 return False
         return True
 
+    async def _find_handler(self, update: Update) -> tuple[_Registration, Router] | None:
+        for source in (self, *self._routers):
+            for reg in source._handlers:
+                if reg.update_types and update.update_type not in reg.update_types:
+                    continue
+                if not await self._passes_filters(reg.filters, update):
+                    continue
+                return reg, source
+        return None
+
+    @staticmethod
+    def _wrap_outer(
+        fn: OuterMiddlewareFn,
+        nxt: CallNextOuter,
+        update: Update,
+    ) -> CallNextOuter:
+        async def step() -> bool:
+            return await fn(update, nxt)
+        return step
+
+    @staticmethod
+    def _wrap_inner(
+        fn: InnerMiddlewareFn,
+        nxt: CallNextInner,
+        handler_fn: Handler,
+        kwargs: dict[str, Any],
+    ) -> CallNextInner:
+        async def step() -> None:
+            await fn(handler_fn, kwargs, nxt)
+        return step
+
+    async def _dispatch_core(self, update: Update, context: dict[type, Any]) -> bool:
+        result = await self._find_handler(update)
+        if result is None:
+            return False
+
+        reg, owner = result
+        handler_fn = reg.fn
+        kwargs = resolve_kwargs(handler_fn, context)
+
+        async def call_handler() -> None:
+            await handler_fn(**kwargs)
+
+        # Строим inner chain: app.inner (снаружи) → router.inner (ближе к хэндлеру) → handler
+        inner_chain: CallNextInner = call_handler
+        if owner is not self:
+            router_inner = [
+                m.fn for m in owner._inner
+                if not m.update_types or update.update_type in m.update_types
+            ]
+            for ifn in reversed(router_inner):
+                inner_chain = self._wrap_inner(ifn, inner_chain, handler_fn, kwargs)
+        app_inner = [
+            m.fn for m in self._inner
+            if not m.update_types or update.update_type in m.update_types
+        ]
+        for ifn in reversed(app_inner):
+            inner_chain = self._wrap_inner(ifn, inner_chain, handler_fn, kwargs)
+
+        # Оборачиваем в router.outer (если хэндлер из роутера)
+        async def run_inner() -> bool:
+            await inner_chain()
+            return True
+
+        router_outer_chain: CallNextOuter = run_inner
+        if owner is not self:
+            router_outer = [
+                m.fn for m in owner._outer
+                if not m.update_types or update.update_type in m.update_types
+            ]
+            for ofn in reversed(router_outer):
+                router_outer_chain = self._wrap_outer(ofn, router_outer_chain, update)
+
+        return await router_outer_chain()
+
     async def feed_update(self, update: Update) -> bool:
-        """Прогнать один апдейт через хэндлеры. Возвращает True, если сработал хэндлер."""
+        """Прогнать один апдейт через middleware и хэндлеры."""
         context = self._build_context(update)
-        token = current_bot.set(self.bot)
+        token_bot = current_bot.set(self.bot)
+        token_fsm = current_fsm_context.set(context.get(FSMContext))
         try:
-            for handler in self._handlers:
-                if handler.update_types and update.update_type not in handler.update_types:
-                    continue
-                if not await self._passes_filters(handler.filters, update):
-                    continue
-                kwargs = resolve_kwargs(handler.fn, context)
-                await handler.fn(**kwargs)
-                return True
+            async def core() -> bool:
+                return await self._dispatch_core(update, context)
+
+            app_outer = [
+                m.fn for m in self._outer
+                if not m.update_types or update.update_type in m.update_types
+            ]
+            outer_chain: CallNextOuter = core
+            for ofn in reversed(app_outer):
+                outer_chain = self._wrap_outer(ofn, outer_chain, update)
+
+            return await outer_chain()
         finally:
-            current_bot.reset(token)
-        return False
+            current_bot.reset(token_bot)
+            current_fsm_context.reset(token_fsm)
 
     # --- long polling ---
 

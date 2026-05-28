@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
+from pathlib import Path
+from typing import IO, Any
 
 import httpx
 
 from maxio._logging import install_token_masking
-from maxio.enums import TextFormat
-from maxio.exceptions import MaxApiError
+from maxio.enums import TextFormat, UploadType
+from maxio.exceptions import MaxApiError, MaxError
 from maxio.keyboards import InlineKeyboard
 from maxio.types.chat import Chat
 from maxio.types.message import (
@@ -241,6 +242,59 @@ class Bot:
             },
         )
         return UpdateList.model_validate(data)
+
+    # --- uploads ---
+
+    async def upload(
+        self,
+        file: bytes | IO[bytes] | Path,
+        upload_type: UploadType | str,
+        *,
+        filename: str | None = None,
+    ) -> str:
+        """Загрузить файл и вернуть токен для использования в attachments.
+
+        Двухшаговый процесс: сначала получаем upload URL от API,
+        затем отправляем файл на этот URL.
+        """
+        if isinstance(file, Path):
+            file_data: bytes = file.read_bytes()
+            fname = filename or file.name
+        elif isinstance(file, bytes):
+            file_data = file
+            fname = filename or "file"
+        else:
+            file_data = file.read()
+            fname = filename or getattr(file, "name", None) or "file"
+
+        # Шаг 1: получить upload endpoint
+        endpoint = await self._request(
+            "POST", "/uploads", params={"type": str(upload_type)}
+        )
+        if not isinstance(endpoint, dict) or "url" not in endpoint:
+            raise MaxError("Не удалось получить upload URL")
+        upload_url: str = endpoint["url"]
+        token_from_endpoint: str | None = endpoint.get("token")
+
+        # Шаг 2: загрузить файл на upload URL (абсолютный, вне base_url)
+        response = await self._client.post(
+            upload_url,
+            files={"data": (fname, file_data)},
+        )
+        try:
+            result: Any = response.json()
+        except ValueError:
+            result = {}
+        if response.status_code >= 400:
+            raise MaxApiError(response.status_code, None, "Ошибка загрузки файла")
+
+        token: str | None = None
+        if isinstance(result, dict):
+            token = result.get("token")
+        token = token or token_from_endpoint
+        if not token:
+            raise MaxError("Upload не вернул токен")
+        return token
 
     async def aclose(self) -> None:
         await self._client.aclose()

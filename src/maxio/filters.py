@@ -51,3 +51,25 @@ class CallbackPayload:
         if update.callback is None:
             return False
         return update.callback.payload in self.payloads
+
+
+class HasMedia:
+    """Совпадает, если сообщение содержит вложения указанных типов.
+
+    Без аргументов — любое вложение. С аргументами — хотя бы одно совпадение.
+
+    Примеры типов: "image", "video", "audio", "file".
+    """
+
+    def __init__(self, *types: str) -> None:
+        self.types = set(types)
+
+    async def check(self, update: Update) -> bool:
+        if update.message is None or update.message.body is None:
+            return False
+        atts = update.message.body.attachments
+        if not atts:
+            return False
+        if not self.types:
+            return True
+        return any(a.type in self.types for a in atts)
