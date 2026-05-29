@@ -1,0 +1,55 @@
+site_name: maxio
+site_description: Асинхронный Python-фреймворк для MAX Bot API
+site_url: https://maxio.readthedocs.io
+repo_url: https://github.com/rlxrd/maxio
+repo_name: rlxrd/maxio
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: ru
+  palette:
+    - scheme: default
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Тёмная тема
+    - scheme: slate
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Светлая тема
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+nav:
+  - Главная: index.md
+  - Руководство:
+    - Быстрый старт: quickstart.md
+    - Хэндлеры: handlers.md
+    - Фильтры и F: filters.md
+    - DI — зависимости: di.md
+    - Middleware: middleware.md
+    - Роутеры: routers.md
+    - FSM: fsm.md
+    - Клавиатуры: keyboards.md
+    - Медиа: media.md
+  - Справочник: api.md
+  - Changelog: changelog.md
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - admonition
+  - pymdownx.details
+  - tables
+  - attr_list
