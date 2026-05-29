@@ -60,7 +60,6 @@ class Bot:
         self,
         token: str,
         *,
-        base_url: str = DEFAULT_BASE_URL,
         timeout: float = 100.0,
         client: httpx.AsyncClient | None = None,
         mask_token_in_logs: bool = True,
@@ -69,7 +68,7 @@ class Bot:
         if mask_token_in_logs:
             install_token_masking()
         self._client = client or httpx.AsyncClient(
-            base_url=base_url,
+            base_url=DEFAULT_BASE_URL,
             timeout=timeout,
             headers={"Authorization": token},
         )

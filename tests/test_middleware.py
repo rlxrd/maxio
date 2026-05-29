@@ -3,15 +3,16 @@ from __future__ import annotations
 from typing import Any
 
 from conftest import message_callback, message_created
-from maxio import MaxBot, Message, Router, Update
+from maxio import Bot, MaxBot, Message, Router, Update
 from maxio.enums import UpdateType
+from maxio.middleware import CallNextInner, CallNextOuter, HandlerKwargs
 
 
 async def test_outer_runs_around_handler() -> None:
     app = MaxBot("TOKEN")
     calls: list[str] = []
 
-    async def mw(update: Update, call_next: Any) -> bool:
+    async def mw(update: Update, call_next: CallNextOuter) -> bool:
         calls.append("before")
         result = await call_next()
         calls.append("after")
@@ -32,7 +33,7 @@ async def test_outer_can_abort() -> None:
     app = MaxBot("TOKEN")
     calls: list[str] = []
 
-    async def mw(update: Update, call_next: Any) -> bool:
+    async def mw(update: Update, call_next: CallNextOuter) -> bool:
         calls.append("aborted")
         return False
 
@@ -52,13 +53,13 @@ async def test_outer_onion_order() -> None:
     app = MaxBot("TOKEN")
     calls: list[str] = []
 
-    async def first(update: Update, call_next: Any) -> bool:
+    async def first(update: Update, call_next: CallNextOuter) -> bool:
         calls.append("first_in")
         result = await call_next()
         calls.append("first_out")
         return result
 
-    async def second(update: Update, call_next: Any) -> bool:
+    async def second(update: Update, call_next: CallNextOuter) -> bool:
         calls.append("second_in")
         result = await call_next()
         calls.append("second_out")
@@ -80,7 +81,7 @@ async def test_outer_filtered_by_update_type() -> None:
     app = MaxBot("TOKEN")
     calls: list[str] = []
 
-    async def mw(update: Update, call_next: Any) -> bool:
+    async def mw(update: Update, call_next: CallNextOuter) -> bool:
         calls.append("mw")
         return await call_next()
 
@@ -104,7 +105,7 @@ async def test_inner_runs_around_handler() -> None:
     app = MaxBot("TOKEN")
     calls: list[str] = []
 
-    async def mw(handler: Any, kwargs: Any, call_next: Any) -> None:
+    async def mw(call_next: CallNextInner) -> None:
         calls.append("inner_before")
         await call_next()
         calls.append("inner_after")
@@ -124,7 +125,7 @@ async def test_inner_receives_resolved_kwargs() -> None:
     app = MaxBot("TOKEN")
     received: dict[str, Any] = {}
 
-    async def mw(handler: Any, kwargs: dict[str, Any], call_next: Any) -> None:
+    async def mw(kwargs: HandlerKwargs, call_next: CallNextInner) -> None:
         received.update(kwargs)
         await call_next()
 
@@ -144,7 +145,7 @@ async def test_inner_can_skip_handler() -> None:
     app = MaxBot("TOKEN")
     calls: list[str] = []
 
-    async def mw(handler: Any, kwargs: Any, call_next: Any) -> None:
+    async def mw(call_next: CallNextInner) -> None:
         calls.append("inner")
 
     app.inner_middleware(mw)
@@ -163,7 +164,7 @@ async def test_inner_filtered_by_update_type() -> None:
     app = MaxBot("TOKEN")
     calls: list[str] = []
 
-    async def mw(handler: Any, kwargs: Any, call_next: Any) -> None:
+    async def mw(call_next: CallNextInner) -> None:
         calls.append("inner")
         await call_next()
 
@@ -183,13 +184,13 @@ async def test_outer_and_inner_combined() -> None:
     app = MaxBot("TOKEN")
     calls: list[str] = []
 
-    async def outer(update: Update, call_next: Any) -> bool:
+    async def outer(update: Update, call_next: CallNextOuter) -> bool:
         calls.append("outer_in")
         result = await call_next()
         calls.append("outer_out")
         return result
 
-    async def inner(handler: Any, kwargs: Any, call_next: Any) -> None:
+    async def inner(call_next: CallNextInner) -> None:
         calls.append("inner_in")
         await call_next()
         calls.append("inner_out")
@@ -212,7 +213,7 @@ async def test_router_outer_middleware() -> None:
     app.include_routers(router)
     calls: list[str] = []
 
-    async def mw(update: Update, call_next: Any) -> bool:
+    async def mw(update: Update, call_next: CallNextOuter) -> bool:
         calls.append("router_outer_in")
         result = await call_next()
         calls.append("router_outer_out")
@@ -235,7 +236,7 @@ async def test_router_outer_not_called_for_app_handler() -> None:
     app.include_routers(router)
     calls: list[str] = []
 
-    async def router_mw(update: Update, call_next: Any) -> bool:
+    async def router_mw(update: Update, call_next: CallNextOuter) -> bool:
         calls.append("router_mw")
         return await call_next()
 
@@ -257,13 +258,13 @@ async def test_app_outer_and_router_outer_order() -> None:
     app.include_routers(router)
     calls: list[str] = []
 
-    async def app_outer(update: Update, call_next: Any) -> bool:
+    async def app_outer(update: Update, call_next: CallNextOuter) -> bool:
         calls.append("app_outer_in")
         result = await call_next()
         calls.append("app_outer_out")
         return result
 
-    async def router_outer(update: Update, call_next: Any) -> bool:
+    async def router_outer(update: Update, call_next: CallNextOuter) -> bool:
         calls.append("router_outer_in")
         result = await call_next()
         calls.append("router_outer_out")
@@ -293,12 +294,12 @@ async def test_app_inner_and_router_inner_order() -> None:
     app.include_routers(router)
     calls: list[str] = []
 
-    async def app_inner(handler: Any, kwargs: Any, call_next: Any) -> None:
+    async def app_inner(call_next: CallNextInner) -> None:
         calls.append("app_inner_in")
         await call_next()
         calls.append("app_inner_out")
 
-    async def router_inner(handler: Any, kwargs: Any, call_next: Any) -> None:
+    async def router_inner(call_next: CallNextInner) -> None:
         calls.append("router_inner_in")
         await call_next()
         calls.append("router_inner_out")
@@ -328,24 +329,24 @@ async def test_full_stack_order() -> None:
     app.include_routers(router)
     calls: list[str] = []
 
-    async def ao(update: Update, call_next: Any) -> bool:
+    async def ao(update: Update, call_next: CallNextOuter) -> bool:
         calls.append("ao")
         r = await call_next()
         calls.append("/ao")
         return r
 
-    async def ro(update: Update, call_next: Any) -> bool:
+    async def ro(update: Update, call_next: CallNextOuter) -> bool:
         calls.append("ro")
         r = await call_next()
         calls.append("/ro")
         return r
 
-    async def ai(handler: Any, kwargs: Any, call_next: Any) -> None:
+    async def ai(call_next: CallNextInner) -> None:
         calls.append("ai")
         await call_next()
         calls.append("/ai")
 
-    async def ri(handler: Any, kwargs: Any, call_next: Any) -> None:
+    async def ri(call_next: CallNextInner) -> None:
         calls.append("ri")
         await call_next()
         calls.append("/ri")
@@ -361,4 +362,74 @@ async def test_full_stack_order() -> None:
 
     await app.feed_update(Update.model_validate(message_created()))
     assert calls == ["ao", "ro", "ai", "ri", "h", "/ri", "/ai", "/ro", "/ao"]
+    await app.bot.aclose()
+
+
+async def test_outer_di_injects_bot() -> None:
+    """Outer middleware может инжектировать Bot и другие DI-типы."""
+    app = MaxBot("TOKEN")
+    received: list[Any] = []
+
+    async def mw(call_next: CallNextOuter, bot: Bot) -> bool:
+        received.append(bot)
+        return await call_next()
+
+    app.outer_middleware(mw)
+
+    @app.message()
+    async def handler(message: Message) -> None:
+        pass
+
+    await app.feed_update(Update.model_validate(message_created()))
+    assert len(received) == 1
+    assert isinstance(received[0], Bot)
+    await app.bot.aclose()
+
+
+async def test_inner_di_injects_message() -> None:
+    """Inner middleware может инжектировать Message и другие DI-типы."""
+    app = MaxBot("TOKEN")
+    received: list[Any] = []
+
+    async def mw(call_next: CallNextInner, message: Message) -> None:
+        received.append(message)
+        await call_next()
+
+    app.inner_middleware(mw)
+
+    @app.message()
+    async def handler(message: Message) -> None:
+        pass
+
+    await app.feed_update(Update.model_validate(message_created("привет")))
+    assert len(received) == 1
+    assert received[0].text == "привет"
+    await app.bot.aclose()
+
+
+async def test_outer_di_optional_message_is_none_for_bot_started() -> None:
+    """Optional[Message] в outer middleware — None для апдейтов без сообщения."""
+    from maxio.enums import UpdateType
+
+    app = MaxBot("TOKEN")
+    received: list[Any] = []
+
+    async def mw(call_next: CallNextOuter, message: Message | None) -> bool:
+        received.append(message)
+        return await call_next()
+
+    app.outer_middleware(mw)
+
+    @app.bot_started()
+    async def handler(update: Update) -> None:
+        pass
+
+    bot_started_update = {
+        "update_type": UpdateType.BOT_STARTED,
+        "timestamp": 1000,
+        "user": {"user_id": 1, "name": "Test", "is_bot": False},
+        "chat_id": 42,
+    }
+    await app.feed_update(Update.model_validate(bot_started_update))
+    assert received == [None]
     await app.bot.aclose()

@@ -14,6 +14,7 @@ from maxio.middleware import (
     CallNextInner,
     CallNextOuter,
     Handler,
+    HandlerKwargs,
     InnerMiddlewareFn,
     OuterMiddlewareFn,
 )
@@ -55,11 +56,17 @@ class MaxBot(Router):
     def __init__(
         self,
         token: str,
+        *,
         storage: BaseStorage | None = None,
-        **bot_kwargs: Any,
+        timeout: float = 100.0,
+        mask_token_in_logs: bool = True,
     ) -> None:
         super().__init__()
-        self.bot = Bot(token, **bot_kwargs)
+        self.bot = Bot(
+            token,
+            timeout=timeout,
+            mask_token_in_logs=mask_token_in_logs,
+        )
         self._storage: BaseStorage = storage if storage is not None else MemoryStorage()
         self._routers: list[Router] = []
         self._running = False
@@ -115,22 +122,31 @@ class MaxBot(Router):
     def _wrap_outer(
         fn: OuterMiddlewareFn,
         nxt: CallNextOuter,
-        update: Update,
+        context: dict[type, Any],
     ) -> CallNextOuter:
         async def step() -> bool:
-            return await fn(update, nxt)
-        return step
+            mw_ctx = {**context, CallNextOuter: nxt}
+            mw_kwargs = resolve_kwargs(fn, mw_ctx)
+            return await fn(**mw_kwargs)
+        return CallNextOuter(step)
 
     @staticmethod
     def _wrap_inner(
         fn: InnerMiddlewareFn,
         nxt: CallNextInner,
         handler_fn: Handler,
-        kwargs: dict[str, Any],
+        handler_kwargs: dict[str, Any],
+        context: dict[type, Any],
     ) -> CallNextInner:
         async def step() -> None:
-            await fn(handler_fn, kwargs, nxt)
-        return step
+            mw_ctx = {
+                **context,
+                CallNextInner: nxt,
+                HandlerKwargs: HandlerKwargs(handler_kwargs),
+            }
+            mw_kwargs = resolve_kwargs(fn, mw_ctx)
+            await fn(**mw_kwargs)
+        return CallNextInner(step)
 
     async def _dispatch_core(self, update: Update, context: dict[type, Any]) -> bool:
         result = await self._find_handler(update)
@@ -145,34 +161,34 @@ class MaxBot(Router):
             await handler_fn(**kwargs)
 
         # Строим inner chain: app.inner (снаружи) → router.inner (ближе к хэндлеру) → handler
-        inner_chain: CallNextInner = call_handler
+        inner_chain = CallNextInner(call_handler)
         if owner is not self:
             router_inner = [
                 m.fn for m in owner._inner
                 if not m.update_types or update.update_type in m.update_types
             ]
             for ifn in reversed(router_inner):
-                inner_chain = self._wrap_inner(ifn, inner_chain, handler_fn, kwargs)
+                inner_chain = self._wrap_inner(ifn, inner_chain, handler_fn, kwargs, context)
         app_inner = [
             m.fn for m in self._inner
             if not m.update_types or update.update_type in m.update_types
         ]
         for ifn in reversed(app_inner):
-            inner_chain = self._wrap_inner(ifn, inner_chain, handler_fn, kwargs)
+            inner_chain = self._wrap_inner(ifn, inner_chain, handler_fn, kwargs, context)
 
         # Оборачиваем в router.outer (если хэндлер из роутера)
         async def run_inner() -> bool:
             await inner_chain()
             return True
 
-        router_outer_chain: CallNextOuter = run_inner
+        router_outer_chain = CallNextOuter(run_inner)
         if owner is not self:
             router_outer = [
                 m.fn for m in owner._outer
                 if not m.update_types or update.update_type in m.update_types
             ]
             for ofn in reversed(router_outer):
-                router_outer_chain = self._wrap_outer(ofn, router_outer_chain, update)
+                router_outer_chain = self._wrap_outer(ofn, router_outer_chain, context)
 
         return await router_outer_chain()
 
@@ -189,9 +205,9 @@ class MaxBot(Router):
                 m.fn for m in self._outer
                 if not m.update_types or update.update_type in m.update_types
             ]
-            outer_chain: CallNextOuter = core
+            outer_chain = CallNextOuter(core)
             for ofn in reversed(app_outer):
-                outer_chain = self._wrap_outer(ofn, outer_chain, update)
+                outer_chain = self._wrap_outer(ofn, outer_chain, context)
 
             return await outer_chain()
         finally:

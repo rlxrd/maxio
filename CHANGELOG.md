@@ -2,6 +2,62 @@
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-29
+
+### Добавлено
+
+- **Все 11 типов событий — именованные декораторы** (`router.py`).
+  Ранее 7 типов были доступны только через `@app.event(...)`. Теперь каждый тип
+  имеет отдельный декоратор:
+  - `@app.message_removed()` — сообщение удалено (`update.message_id`, `update.chat_id`)
+  - `@app.chat_created()` — создан групповой чат (`update.chat`, `update.message_id`)
+  - `@app.chat_title_changed()` — изменён заголовок (`update.title`, `update.user`)
+  - `@app.user_added()` — пользователь добавлен (`update.user`, `update.inviter_id`)
+  - `@app.user_removed()` — пользователь удалён (`update.user`, `update.admin_id`)
+  - `@app.bot_added()` — бот добавлен в чат/канал (`update.user`, `update.is_channel`)
+  - `@app.bot_removed()` — бот удалён из чата/канала (`update.user`, `update.is_channel`)
+
+- **F (MagicFilter)** — `src/maxio/magic.py`, экспортируется как `from maxio import F`.
+  Ленивый объект для построения фильтров-выражений без отдельных классов.
+  - Шорткаты: `F.text`, `F.data`, `F.payload`, `F.photo`/`F.image`, `F.video`, `F.audio`, `F.file`/`F.document`
+  - Операторы: `==`, `!=`, `.startswith()`, `.endswith()`, `.contains()`, `.in_()`, `.not_in_()`
+  - Комбинаторы: `&` (AND), `|` (OR), `~` (NOT)
+  - Полный путь: `F.message.sender.user_id == 5`
+
+- **DI в middleware** — middleware теперь получает аргументы через тот же механизм, что и хэндлеры.
+  `CallNextOuter` и `CallNextInner` стали реальными инжектируемыми классами (раньше — type aliases).
+  `HandlerKwargs` — новый инжектируемый тип для inner middleware: словарь уже резолвленных
+  аргументов хэндлера. Все три экспортируются из `maxio.middleware` и из `maxio`.
+
+  ```python
+  # Раньше
+  async def mw(update: Update, call_next: Any) -> bool: ...
+  async def mw(handler: Any, kwargs: Any, call_next: Any) -> None: ...
+
+  # Теперь
+  async def mw(update: Update, call_next: CallNextOuter, user: User | None) -> bool: ...
+  async def mw(call_next: CallNextInner, kwargs: HandlerKwargs, message: Message) -> None: ...
+  ```
+
+- **Optional в DI** — резолвер (`injection.py`) понимает `X | None` и `Optional[X]`.
+  Если тип недоступен для данного апдейта — подставляется `None` вместо `MaxError`.
+
+  ```python
+  @app.bot_started()
+  async def on_start(update: Update, message: Message | None) -> None:
+      # message == None, bot_started не несёт объект Message
+      ...
+  ```
+
+### Изменено
+
+- **`MaxBot.__init__`** — убран `**bot_kwargs: Any`, параметры явные и keyword-only:
+  `storage`, `timeout`, `mask_token_in_logs`. Убран `base_url` — адрес API фиксирован
+  (`https://botapi.max.ru`) и не должен меняться пользователем.
+- **`Bot.__init__`** — аналогично убран `base_url` из публичного API.
+- Примеры (`echo_bot.py`, `showcase.py`) переписаны под v0.4: новые декораторы,
+  `F` вместо `CallbackPayload`, обновлённые сигнатуры middleware.
+
 ## [0.3.0] — 2026-05-28
 
 ### Добавлено
@@ -24,20 +80,15 @@
 - Токен больше не утекает в логи: при `logging.INFO` httpx писал полный URL с
   query-параметром `access_token`. Добавлен фильтр `TokenMaskingFilter`, который маскирует
   `access_token=...` и `Authorization: ...` на `***`.
-- У `Bot` появился параметр `mask_token_in_logs: bool = True` (включён по умолчанию),
-  прокидывается и через `MaxBot(token, ...)`.
+- У `Bot` появился параметр `mask_token_in_logs: bool = True` (включён по умолчанию).
 
 ### Изменено (breaking)
 - Декоратор `MaxBot.startup()` переименован в `bot_started()` — имя совпадает с типом
-  события MAX. Синяя кнопка Start шлёт событие `bot_started` (без `message`), а не команду
-  `/start`, поэтому ловить её нужно через `@app.bot_started()`.
-- Типы `Callback` и `CallbackQuery` объединены в один `Callback` (поля `message`, `user`,
-  `from_user`, метод `answer()`). `CallbackQuery` удалён.
-- В хэндлерах рекомендуемое имя аргумента — `callback: Callback` (по аналогии с `message: Message`).
+  события MAX.
+- Типы `Callback` и `CallbackQuery` объединены в один `Callback`.
 
 ### Добавлено
-- `callback.message.answer()` / `.reply()` — отправка сообщения в чат из обработчика
-  нажатия кнопки (исходное сообщение проставляется в `callback.message`).
+- `callback.message.answer()` / `.reply()` — отправка из обработчика нажатия кнопки.
 
 ## [0.1.0] — 2025-05-27
 
@@ -51,7 +102,8 @@
 - Сахар на моделях: `Message.answer()`, `Message.reply()`, `CallbackQuery.answer()`
 - Pydantic v2, `py.typed`, совместимость с `mypy --strict`
 
-[Unreleased]: https://github.com/rlxrd/maxio/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/rlxrd/maxio/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/rlxrd/maxio/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/rlxrd/maxio/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/rlxrd/maxio/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/rlxrd/maxio/releases/tag/v0.1.0

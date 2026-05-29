@@ -56,6 +56,27 @@ class Router:
     def bot_started(self, *filters: Filter | FilterFunc) -> Callable[[Handler], Handler]:
         return self._register((UpdateType.BOT_STARTED.value,), filters)
 
+    def bot_added(self, *filters: Filter | FilterFunc) -> Callable[[Handler], Handler]:
+        return self._register((UpdateType.BOT_ADDED.value,), filters)
+
+    def bot_removed(self, *filters: Filter | FilterFunc) -> Callable[[Handler], Handler]:
+        return self._register((UpdateType.BOT_REMOVED.value,), filters)
+
+    def user_added(self, *filters: Filter | FilterFunc) -> Callable[[Handler], Handler]:
+        return self._register((UpdateType.USER_ADDED.value,), filters)
+
+    def user_removed(self, *filters: Filter | FilterFunc) -> Callable[[Handler], Handler]:
+        return self._register((UpdateType.USER_REMOVED.value,), filters)
+
+    def message_removed(self, *filters: Filter | FilterFunc) -> Callable[[Handler], Handler]:
+        return self._register((UpdateType.MESSAGE_REMOVED.value,), filters)
+
+    def chat_created(self, *filters: Filter | FilterFunc) -> Callable[[Handler], Handler]:
+        return self._register((UpdateType.MESSAGE_CHAT_CREATED.value,), filters)
+
+    def chat_title_changed(self, *filters: Filter | FilterFunc) -> Callable[[Handler], Handler]:
+        return self._register((UpdateType.CHAT_TITLE_CHANGED.value,), filters)
+
     def event(
         self,
         *update_types: str,

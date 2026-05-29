@@ -15,8 +15,8 @@ from pathlib import Path
 from maxio import (
     Bot,
     Callback,
-    CallbackPayload,
     Command,
+    F,
     FSMContext,
     HasMedia,
     InlineKeyboard,
@@ -32,45 +32,48 @@ from maxio import (
 )
 from maxio.enums import Intent, UpdateType, UploadType
 from maxio.keyboards import Button
-from maxio.middleware import CallNextInner, CallNextOuter
+from maxio.middleware import CallNextInner, CallNextOuter, HandlerKwargs
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# =============================================================================
-# ПРИЛОЖЕНИЕ
-# =============================================================================
-
-app = MaxBot(os.environ.get("MAX_TOKEN", "TOKEN"))
 
 # =============================================================================
-# РОУТЕРЫ
-# Декораторы message/callback/... работают одинаково на MaxBot и Router.
+# ПРИЛОЖЕНИЕ И РОУТЕРЫ
+#
+# MaxBot наследует Router — декораторы работают одинаково на MaxBot и Router.
 # app обходится первым, затем роутеры в порядке include_routers.
 # =============================================================================
+
+app = MaxBot(
+    os.environ.get("MAX_TOKEN", "TOKEN"),
+    timeout=60.0,           # таймаут HTTP-запросов
+    mask_token_in_logs=True,  # скрыть токен в логах httpx (по умолч. True)
+)
 
 admin_router = Router()
 user_router = Router()
 
 app.include_routers(admin_router, user_router)
 
+
 # =============================================================================
 # MIDDLEWARE
-# Middleware — callable (класс с __call__ или функция).
-# Регистрируется на app или router через outer_middleware / inner_middleware.
 #
 # Полный порядок для хэндлера из роутера:
-#   app.outer → router.outer → app.inner → router.inner → handler()
+#   app.outer → router.outer → app.inner → router.inner → handler
+#
+# Outer middleware: оборачивает всю диспетчеризацию.
+#   Принимает update + call_next по DI; может прервать цепочку (не вызвать call_next).
+#
+# Inner middleware: вызывается после выбора хэндлера, до его вызова.
+#   Принимает call_next + любые DI-типы (Message, User, Bot и др.).
 # =============================================================================
 
-# --- Outer middleware: оборачивает всю диспетчеризацию ---
-# Получает: (update, call_next) → bool
-# Может прервать обработку (не вызвать call_next) или модифицировать апдейт.
 
+# --- Outer middleware: замер времени ---
 
 class TimingMiddleware:
-    """Замеряет время обработки каждого апдейта."""
-
     async def __call__(self, update: Update, call_next: CallNextOuter) -> bool:
         t = time.monotonic()
         result = await call_next()
@@ -78,32 +81,26 @@ class TimingMiddleware:
         return result
 
 
-# Регистрация на app — срабатывает для всех апдейтов
 app.outer_middleware(TimingMiddleware())
 
 
-# Функция тоже подходит — не обязательно класс
-async def log_updates(update: Update, call_next: CallNextOuter) -> bool:
-    logger.info("[log] входящий апдейт: %s", update.update_type)
+# --- Outer middleware: функция, только для message_created ---
+
+async def log_messages(update: Update, call_next: CallNextOuter) -> bool:
+    logger.info("[msg] от user_id=%s", update.user.user_id if update.user else "?")
     return await call_next()
 
 
-# Только для сообщений
-app.outer_middleware(log_updates, UpdateType.MESSAGE_CREATED)
+app.outer_middleware(log_messages, UpdateType.MESSAGE_CREATED)
 
 
-# --- Outer middleware на роутере ---
-# Срабатывает только если хэндлер принадлежит этому роутеру
+# --- Outer middleware на роутере: проверка прав ---
+# User инжектируется по типу — не нужно читать из update вручную
 
 ADMIN_IDS = {123456789}
 
 
-async def require_admin(update: Update, call_next: CallNextOuter) -> bool:
-    user = (
-        (update.message and update.message.sender)
-        or (update.callback and update.callback.user)
-        or update.user
-    )
+async def require_admin(call_next: CallNextOuter, user: User | None) -> bool:
     if not user or user.user_id not in ADMIN_IDS:
         return False
     return await call_next()
@@ -112,72 +109,43 @@ async def require_admin(update: Update, call_next: CallNextOuter) -> bool:
 admin_router.outer_middleware(require_admin)
 
 
-# --- Inner middleware: вызывается после выбора хэндлера ---
-# Получает: (handler_fn, kwargs, call_next) → None
-# kwargs — уже резолвленные аргументы хэндлера (можно читать и изменять).
+# --- Inner middleware: логирование kwargs хэндлера ---
+# HandlerKwargs — уже резолвленные аргументы, которые пойдут в хэндлер
+
+async def log_handler_args(call_next: CallNextInner, kwargs: HandlerKwargs) -> None:
+    logger.debug("[inner] хэндлер получит: %s", list(kwargs.keys()))
+    await call_next()
 
 
-class InjectDbUser:
-    """Добавляет данные о пользователе из «базы» в kwargs."""
-
-    async def __call__(
-        self, handler: object, kwargs: dict[str, object], call_next: CallNextInner
-    ) -> None:
-        message: Message | None = kwargs.get("message")  # type: ignore[assignment]
-        if message and message.sender:
-            # имитация запроса к БД
-            kwargs["db_user"] = {"id": message.sender.user_id, "premium": False}
-        await call_next()
-
-
-app.inner_middleware(InjectDbUser())
-
-# =============================================================================
-# ФИЛЬТРЫ
-# Фильтр — объект с методом async check(update) -> bool
-#           или простая функция (sync/async) update -> bool.
-# Несколько фильтров в декораторе объединяются как AND.
-# =============================================================================
-
-
-# --- Встроенные фильтры ---
-
-# Command: совпадает если сообщение начинается с /команды
-# CallbackPayload: совпадает если payload кнопки равен одному из значений
-
-
-# --- Кастомный фильтр через класс (Protocol Filter) ---
-
-class IsPrivateChat:
-    """Пропускает только личные чаты (не группы)."""
-
-    async def check(self, update: Update) -> bool:
-        if update.message and update.message.recipient:
-            return update.message.recipient.chat_type == "dialog"
-        return False
-
-
-# --- Кастомный фильтр через функцию ---
-
-def has_text(update: Update) -> bool:
-    """Пропускает только сообщения с непустым текстом."""
-    return bool(update.message and update.message.text)
-
-
-# --- Кастомный фильтр async-функцией ---
-
-async def not_bot(update: Update) -> bool:
-    """Пропускает только сообщения от живых пользователей."""
-    if update.message and update.message.sender:
-        return not update.message.sender.is_bot
-    return True
+app.inner_middleware(log_handler_args)
 
 
 # =============================================================================
-# ХЭНДЛЕРЫ — ТИПЫ СОБЫТИЙ
+# F — MAGIC FILTER
+#
+# F — ленивый объект для построения фильтров без лишних классов.
+# Поддерживает: ==, !=, &, |, ~, .startswith(), .endswith(),
+#               .contains(), .in_(), .not_in_()
+#
+# Шорткаты:
+#   F.text      → message.text
+#   F.data      → callback.payload
+#   F.payload   → update.payload (bot_started deep link)
+#   F.photo / F.image → есть фото-вложение
+#   F.video, F.audio, F.file / F.document — аналогично
+#
+# Полный путь тоже работает: F.message.sender.user_id == 5
+# =============================================================================
+
+# Примеры ниже используют F как фильтр в декораторах хэндлеров.
+
+
+# =============================================================================
+# ХЭНДЛЕРЫ — ВСЕ ТИПЫ СОБЫТИЙ
 # =============================================================================
 
 # --- bot_started: пользователь нажал кнопку «Начать» ---
+# Поля: update.user, update.chat_id, update.payload (deep link)
 
 @app.bot_started()
 async def on_start(update: Update, bot: Bot) -> None:
@@ -186,88 +154,164 @@ async def on_start(update: Update, bot: Bot) -> None:
         .row(Button.callback("Помощь", "help"), Button.callback("О боте", "about"))
         .row(Button.link("Сайт MAX", "https://max.ru"))
     )
-    chat_id = update.chat_id
-    if chat_id:
-        await bot.send_message("Привет! Выбери действие:", chat_id=chat_id, keyboard=kb)
+    if update.chat_id:
+        await bot.send_message("Привет! Выбери действие:", chat_id=update.chat_id, keyboard=kb)
 
 
-# --- message: входящее сообщение ---
+# --- message_created: входящее сообщение ---
 
 @app.message(Command("help"))
 async def cmd_help(message: Message) -> None:
-    await message.answer("Доступные команды:\n/help — эта справка\n/about — о боте")
+    await message.answer("Доступные команды:\n/help — справка\n/about — о боте\n/register — анкета")
 
 
 @app.message(Command("about"))
 async def cmd_about(message: Message, bot: Bot) -> None:
     me = await bot.get_me()
-    await message.answer(f"Я бот @{me.username}, версия maxio v0.3")
+    await message.answer(f"Бот @{me.username} на фреймворке maxio")
 
 
-# Несколько фильтров одновременно (AND): личный чат + непустой текст
-@user_router.message(IsPrivateChat(), has_text, not_bot)
+# F вместо CallbackPayload и ручных проверок
+@app.message(F.text == "да")
+async def on_yes(message: Message) -> None:
+    await message.answer("Ты сказал «да»!")
+
+
+@app.message(F.text.in_("стоп", "отмена", "отменить"))
+async def on_stop_words(message: Message) -> None:
+    await message.answer("Понял, останавливаю.")
+
+
+@app.message(F.text.startswith("/") & ~F.text.startswith("/start"))
+async def unknown_command(message: Message) -> None:
+    await message.answer("Неизвестная команда. Напиши /help")
+
+
+# Несколько фильтров через AND — личный чат и непустой текст
+def is_private(update: Update) -> bool:
+    return bool(update.message and update.message.recipient.chat_type == "dialog")
+
+
+@user_router.message(is_private, F.text)
 async def echo_private(message: Message) -> None:
     await message.reply(message.text or "")
 
 
-# Хэндлер без фильтров — ловит всё остальное (fallback)
 @app.message()
 async def fallback_message(message: Message) -> None:
-    await message.answer("Не понял команду. Напиши /help")
+    await message.answer("Не понял. Напиши /help")
 
 
 # --- message_edited: пользователь отредактировал сообщение ---
 
 @app.message_edited()
 async def on_edit(message: Message) -> None:
-    await message.answer(f"Ты отредактировал сообщение: «{message.text}»")
+    await message.answer(f"Ты отредактировал: «{message.text}»")
 
 
-# --- callback: нажатие inline-кнопки ---
+# --- message_removed: сообщение удалено ---
+# Поля: update.message_id, update.chat_id — объекта Message нет
 
-@app.callback(CallbackPayload("help"))
+@app.message_removed()
+async def on_removed(update: Update) -> None:
+    logger.info("Удалено сообщение %s в чате %s", update.message_id, update.chat_id)
+
+
+# --- message_callback: нажата inline-кнопка ---
+
+@app.callback(F.data == "help")
 async def cb_help(callback: Callback) -> None:
-    # answer() — всплывающее уведомление на кнопке
     await callback.answer(notification="Открываю справку…")
     if callback.message:
-        await callback.message.answer("Доступные команды:\n/help\n/about")
+        await callback.message.answer("Команды: /help /about /register")
 
 
-@app.callback(CallbackPayload("about"))
+@app.callback(F.data == "about")
 async def cb_about(callback: Callback, bot: Bot) -> None:
     me = await bot.get_me()
     await callback.answer(notification=f"Бот @{me.username}")
 
 
-# Fallback для всех остальных callback
+@app.callback(F.data.in_("buy", "sell"))
+async def cb_trade(callback: Callback) -> None:
+    action = "Покупаю" if callback.payload == "buy" else "Продаю"
+    await callback.answer(notification=action)
+
+
 @app.callback()
 async def cb_fallback(callback: Callback) -> None:
     await callback.answer(notification=f"Нажата кнопка: {callback.payload}")
 
 
-# --- event: произвольные типы апдейтов (низкоуровневый хэндлер) ---
+# --- bot_added: бот добавлен в чат или канал ---
+# Поля: update.chat_id, update.user (кто добавил), update.is_channel
 
-@app.event(UpdateType.BOT_ADDED, UpdateType.BOT_REMOVED)
-async def on_bot_membership(update: Update) -> None:
-    action = "добавлен в" if update.update_type == UpdateType.BOT_ADDED else "удалён из"
-    logger.info("Бот %s чат %s", action, update.chat_id)
+@app.bot_added()
+async def on_bot_added(update: Update, bot: Bot) -> None:
+    kind = "канал" if update.is_channel else "чат"
+    logger.info("Бот добавлен в %s %s", kind, update.chat_id)
+    if update.chat_id and not update.is_channel:
+        await bot.send_message("Привет! Я готов к работе.", chat_id=update.chat_id)
 
 
-# event без аргументов — ловит вообще всё (используй осторожно)
-# @app.event()
-# async def catch_all(update: Update) -> None:
-#     logger.debug("Неизвестный апдейт: %s", update.update_type)
+# --- bot_removed: бот удалён из чата или канала ---
+
+@app.bot_removed()
+async def on_bot_removed(update: Update) -> None:
+    logger.info("Бот удалён из чата %s", update.chat_id)
+
+
+# --- user_added: пользователь добавлен в чат ---
+# Поля: update.user (кто добавлен), update.chat_id, update.inviter_id
+
+@app.user_added()
+async def on_user_added(update: Update, bot: Bot, user: User | None) -> None:
+    if user and update.chat_id:
+        await bot.send_message(
+            f"Добро пожаловать, {user.full_name}!",
+            chat_id=update.chat_id,
+        )
+
+
+# --- user_removed: пользователь покинул или удалён из чата ---
+# Поля: update.user (кто ушёл), update.chat_id, update.admin_id (кто выгнал)
+
+@app.user_removed()
+async def on_user_removed(update: Update, user: User | None) -> None:
+    name = user.full_name if user else "Кто-то"
+    logger.info("%s покинул чат %s", name, update.chat_id)
+
+
+# --- chat_created: создан групповой чат с ботом ---
+# Поля: update.chat (объект Chat), update.message_id
+
+@app.chat_created()
+async def on_chat_created(update: Update, bot: Bot) -> None:
+    if update.chat_id:
+        await bot.send_message("Чат создан! Я готов.", chat_id=update.chat_id)
+
+
+# --- chat_title_changed: изменён заголовок чата ---
+# Поля: update.chat_id, update.title (новый), update.user (кто менял)
+
+@app.chat_title_changed()
+async def on_title_changed(update: Update) -> None:
+    logger.info("Чат %s переименован в «%s»", update.chat_id, update.title)
 
 
 # =============================================================================
-# DI — внедрение зависимостей по аннотациям типов
-# Доступные типы в хэндлере:
-#   Update  — всегда
-#   Bot     — всегда (HTTP-клиент)
-#   Message — для message_created / message_edited / callback
-#   Callback — для message_callback
-#   User    — отправитель / инициатор
-#   Chat    — для bot_added / bot_removed и др.
+# DI — ВНЕДРЕНИЕ ЗАВИСИМОСТЕЙ
+#
+# Объявляй в сигнатуре хэндлера только то, что нужно.
+# Фреймворк резолвит аргументы по аннотации типа.
+#
+# Доступно всегда:     Update, Bot, FSMContext
+# Для message_*:       Message, User (sender)
+# Для callback:        Callback, User
+# Для user_added и др.: User (из update.user)
+# Для chat_created:    Chat
+#
+# Optional[X] / X | None — подставляется None если тип недоступен.
 # =============================================================================
 
 @user_router.message(Command("me"))
@@ -279,61 +323,47 @@ async def cmd_me(message: Message, user: User, bot: Bot) -> None:
     )
 
 
+# Optional — безопасно даже если sender не известен
+@app.event(UpdateType.MESSAGE_CREATED)
+async def log_sender(update: Update, user: User | None) -> None:
+    logger.debug("Сообщение от: %s", user.full_name if user else "неизвестен")
+
+
 # =============================================================================
 # КЛАВИАТУРА
-# InlineKeyboard строится цепочкой .row() / .add().
-# Button.*  — фабрики кнопок разных типов.
 # =============================================================================
 
 @user_router.message(Command("keyboard"))
-async def cmd_keyboard(message: Message, bot: Bot) -> None:
+async def cmd_keyboard(message: Message) -> None:
     kb = (
         InlineKeyboard()
-        # row() — новый ряд из переданных кнопок
         .row(
             Button.callback("✅ Ок", "ok", intent=Intent.POSITIVE),
             Button.callback("❌ Отмена", "cancel", intent=Intent.NEGATIVE),
         )
-        # add() — добавить кнопки в текущий ряд
+        .row(Button.callback("Купить", "buy"), Button.callback("Продать", "sell"))
         .row(Button.link("Документация", "https://dev.max.ru"))
         .row(Button.request_contact("📱 Поделиться номером"))
         .row(Button.request_geo_location("📍 Моя геопозиция"))
     )
-    if message.recipient and message.recipient.chat_id:
-        await bot.send_message(
-            "Выбери действие:",
-            chat_id=message.recipient.chat_id,
-            keyboard=kb,
-        )
+    await message.answer("Выбери действие:", keyboard=kb)
 
 
 # =============================================================================
-# FSM — конечные автоматы (диалоги с состоянием)
-#
-# Определяем группу состояний через StatesGroup.
-# Каждое поле-класса State получает ключ "<ИмяГруппы>:<имя_поля>" автоматически.
-#
-# FSMContext инжектируется в хэндлер по типу аннотации.
-# StateFilter используется как обычный фильтр — проверяет текущее состояние.
-#
-# По умолчанию MaxBot хранит состояния в памяти (MemoryStorage).
-# Для многопроцессного деплоя подключи Redis-storage (не входит в ядро).
+# FSM — КОНЕЧНЫЕ АВТОМАТЫ
 # =============================================================================
-
 
 class Form(StatesGroup):
     waiting_name = State()
     waiting_age = State()
 
 
-# --- Начало диалога ---
 @user_router.message(Command("register"))
 async def cmd_register(message: Message, fsm: FSMContext) -> None:
     await fsm.set_state(Form.waiting_name)
     await message.answer("Как тебя зовут?")
 
 
-# --- Шаг 1: принять имя ---
 @user_router.message(StateFilter(Form.waiting_name))
 async def fsm_got_name(message: Message, fsm: FSMContext) -> None:
     await fsm.update_data(name=message.text)
@@ -341,75 +371,56 @@ async def fsm_got_name(message: Message, fsm: FSMContext) -> None:
     await message.answer("Сколько тебе лет?")
 
 
-# --- Шаг 2: принять возраст и завершить ---
 @user_router.message(StateFilter(Form.waiting_age))
 async def fsm_got_age(message: Message, fsm: FSMContext) -> None:
     data = await fsm.get_data()
-    name = data.get("name", "?")
-    age = message.text or "?"
     await fsm.clear()
-    await message.answer(f"Записал: {name}, {age} лет. Готово!")
+    await message.answer(f"Записал: {data.get('name', '?')}, {message.text or '?'} лет.")
 
 
-# --- Отмена из любого состояния ---
 @user_router.message(Command("cancel"), StateFilter(Form.waiting_name, Form.waiting_age))
 async def fsm_cancel(message: Message, fsm: FSMContext) -> None:
     await fsm.clear()
-    await message.answer("Регистрация отменена.")
+    await message.answer("Отменено.")
 
 
 # =============================================================================
-# МЕДИА — загрузка и отправка файлов, получение вложений
-#
-# Загрузка — двухшаговый процесс:
-#   1. bot.upload(file, UploadType.IMAGE) → строковый токен
-#   2. Передать токен через media.image(token) в параметр attachments
-#
-# Получение — Message.photos / .videos / .audio / .files возвращают
-# типизированные payload-объекты с полями token, url, filename, size и др.
-#
-# HasMedia(*types) — фильтр по наличию вложений нужных типов.
+# МЕДИА
 # =============================================================================
 
-
-# --- Отправить картинку из файла ---
 @user_router.message(Command("sendphoto"))
 async def cmd_send_photo(message: Message, bot: Bot) -> None:
-    # Принимает bytes, IO[bytes] или Path
     photo_path = Path("examples/sample.jpg")
     if not photo_path.exists():
-        await message.answer("Файл examples/sample.jpg не найден — добавь его для теста.")
+        await message.answer("Файл examples/sample.jpg не найден.")
         return
     token = await bot.upload(photo_path, UploadType.IMAGE)
-    await message.answer(
-        "Держи картинку!",
-        attachments=[media.image(token)],
-    )
+    await message.answer("Держи картинку!", attachments=[media.image(token)])
 
 
-# --- Пересылка полученного файла ---
-@user_router.message(HasMedia("file"))
-async def echo_file(message: Message) -> None:
-    for f in message.files:
-        await message.answer(
-            f"Получил файл «{f.filename}» "
-            f"({f.size or '?'} байт). "
-            f"URL: {f.url}"
-        )
-
-
-# --- Получить фото и показать URL ---
-@user_router.message(HasMedia("image"))
+# F.photo вместо HasMedia("image")
+@user_router.message(F.photo)
 async def got_photo(message: Message) -> None:
     urls = [p.url for p in message.photos if p.url]
-    await message.answer("Фото получены:\n" + "\n".join(urls or ["—"]))
+    await message.answer("Фото:\n" + "\n".join(urls or ["—"]))
 
 
-# --- HasMedia без аргументов — любое вложение ---
+@user_router.message(F.video)
+async def got_video(message: Message) -> None:
+    await message.answer(f"Видео получено ({len(message.videos)} шт.)")
+
+
+@user_router.message(F.file)
+async def got_file(message: Message) -> None:
+    for f in message.files:
+        await message.answer(f"Файл: {f.filename} ({f.size or '?'} байт)")
+
+
+# HasMedia без аргументов — любое вложение (старый стиль, тоже работает)
 @user_router.message(HasMedia())
 async def got_any_media(message: Message) -> None:
     types = {a.type for a in message.attachments}
-    await message.answer(f"Получено медиа: {', '.join(sorted(types))}")
+    await message.answer(f"Медиа: {', '.join(sorted(types))}")
 
 
 # =============================================================================

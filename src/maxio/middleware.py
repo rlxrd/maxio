@@ -4,15 +4,39 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
-from maxio.types.update import Update
-
 Handler = Callable[..., Awaitable[Any]]
 
-CallNextOuter = Callable[[], Awaitable[bool]]
-OuterMiddlewareFn = Callable[[Update, CallNextOuter], Awaitable[bool]]
 
-CallNextInner = Callable[[], Awaitable[None]]
-InnerMiddlewareFn = Callable[[Handler, dict[str, Any], CallNextInner], Awaitable[None]]
+class CallNextOuter:
+    """Вызов следующего шага в outer middleware."""
+
+    __slots__ = ("_fn",)
+
+    def __init__(self, fn: Callable[[], Awaitable[bool]]) -> None:
+        self._fn = fn
+
+    async def __call__(self) -> bool:
+        return await self._fn()
+
+
+class CallNextInner:
+    """Вызов следующего шага в inner middleware."""
+
+    __slots__ = ("_fn",)
+
+    def __init__(self, fn: Callable[[], Awaitable[None]]) -> None:
+        self._fn = fn
+
+    async def __call__(self) -> None:
+        await self._fn()
+
+
+class HandlerKwargs(dict):  # type: ignore[type-arg]
+    """Разрешённые аргументы хэндлера — инжектируются в inner middleware по типу."""
+
+
+OuterMiddlewareFn = Callable[..., Awaitable[bool]]
+InnerMiddlewareFn = Callable[..., Awaitable[None]]
 
 
 @dataclass(slots=True)
