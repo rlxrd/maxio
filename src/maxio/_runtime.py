@@ -6,16 +6,18 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from maxio.bot import Bot
 
-# Текущий Bot активного апдейта. Диспетчер выставляет его перед вызовом хэндлера,
-# чтобы методы-сахар (Message.answer, Callback.answer) работали без явной передачи бота.
 current_bot: ContextVar[Bot] = ContextVar("current_bot")
 
 
 def get_current_bot() -> Bot:
+    """Return the Bot instance active in the current handler context.
+
+    Raises :exc:`RuntimeError` if called outside an update handler.
+    """
     try:
         return current_bot.get()
-    except LookupError as exc:  # pragma: no cover - защитная ветка
+    except LookupError as exc:  # pragma: no cover
         raise RuntimeError(
-            "Нет активного Bot в контексте. Методы answer()/reply() доступны "
-            "только внутри обработчика апдейта."
+            "No active Bot in context. answer()/reply() methods are only "
+            "available inside an update handler."
         ) from exc
