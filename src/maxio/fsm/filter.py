@@ -6,7 +6,7 @@ from maxio.types.update import Update
 
 
 class StateFilter:
-    """Пропускает апдейт, если текущее состояние пользователя совпадает с одним из заданных."""
+    """Passes an update only when the user's current FSM state matches one of the given states."""
 
     def __init__(self, *states: State | str) -> None:
         self.states = {s.key if isinstance(s, State) else s for s in states}
