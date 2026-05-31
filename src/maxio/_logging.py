@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import re
 
-# access_token=<токен> в query и Authorization: <токен> в заголовках.
 _PATTERNS = (
     re.compile(r"(access_token=)[^&\s\"']+"),
     re.compile(r"(Authorization['\"]?\s*[:=]\s*['\"]?)[^\s,'\"}]+", re.IGNORECASE),
@@ -21,7 +20,7 @@ def _mask(text: str) -> str:
 
 
 class TokenMaskingFilter(logging.Filter):
-    """Прячет токен (`access_token=...`, `Authorization: ...`) в записях лога."""
+    """Masks bot token (``access_token=...``, ``Authorization: ...``) in log records."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         if isinstance(record.msg, str):
@@ -40,7 +39,7 @@ class TokenMaskingFilter(logging.Filter):
 
 
 def install_token_masking(logger_name: str = "httpx") -> None:
-    """Однократно повесить маскирующий фильтр на указанный логгер."""
+    """Attach a token-masking filter to the given logger (no-op if already installed)."""
     logger = logging.getLogger(logger_name)
     if any(getattr(f, _FILTER_FLAG, False) for f in logger.filters):
         return
