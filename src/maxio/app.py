@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Annotated, Any
+
+from annotated_doc import Doc
 
 from maxio._runtime import current_bot
 from maxio.bot import Bot
@@ -30,8 +32,6 @@ logger = logging.getLogger("maxio")
 
 def _storage_key(update: Update) -> StorageKey | None:
     user_id: int | None = None
-    # update.chat_id заполняется для событий уровня чата (bot_added/removed/etc.)
-    # для message* chat_id живёт в message.recipient.chat_id
     chat_id: int | None = update.chat_id
     if update.message is not None:
         if update.message.sender is not None:
@@ -50,16 +50,63 @@ def _storage_key(update: Update) -> StorageKey | None:
 
 
 class MaxBot(Router):
-    """Приложение-бот: хэндлеры регистрируются декораторами,
-    а их аргументы внедряются по аннотациям типов."""
+    """Main bot application. Register handlers with decorators; arguments are injected by type.
+
+    Example:
+        ```python
+        from maxio import MaxBot, Message
+
+        bot = MaxBot("your-token")
+
+        @bot.message()
+        async def echo(message: Message) -> None:
+            await message.answer(message.text)
+
+        bot.run()
+        ```
+    """
 
     def __init__(
         self,
-        token: str,
+        token: Annotated[
+            str,
+            Doc(
+                """
+                MAX Bot API access token.
+
+                Obtain it from the BotFather in the MAX messenger.
+                """
+            ),
+        ],
         *,
-        storage: BaseStorage | None = None,
-        timeout: float = 100.0,
-        mask_token_in_logs: bool = True,
+        storage: Annotated[
+            BaseStorage | None,
+            Doc(
+                """
+                FSM state storage backend.
+
+                Defaults to ``MemoryStorage`` when not provided.
+                """
+            ),
+        ] = None,
+        timeout: Annotated[
+            float,
+            Doc(
+                """
+                HTTP request timeout in seconds forwarded to ``Bot``.
+                """
+            ),
+        ] = 100.0,
+        mask_token_in_logs: Annotated[
+            bool,
+            Doc(
+                """
+                Replace the token with ``***`` in all log output.
+
+                Enabled by default to prevent accidental token leaks.
+                """
+            ),
+        ] = True,
     ) -> None:
         super().__init__()
         self.bot = Bot(
@@ -73,10 +120,11 @@ class MaxBot(Router):
         self.me: BotInfo | None = None
 
     def include_routers(self, *routers: Router) -> None:
-        """Подключить роутеры. Хэндлеры app проверяются первыми, затем роутеры по порядку."""
-        self._routers.extend(routers)
+        """Mount routers onto this application.
 
-    # --- диспетчеризация ---
+        App-level handlers are checked first, then routers in the order they are added.
+        """
+        self._routers.extend(routers)
 
     def _build_context(self, update: Update) -> dict[type, Any]:
         ctx: dict[type, Any] = {Bot: self.bot, Update: update}
@@ -160,7 +208,6 @@ class MaxBot(Router):
         async def call_handler() -> None:
             await handler_fn(**kwargs)
 
-        # Строим inner chain: app.inner (снаружи) → router.inner (ближе к хэндлеру) → handler
         inner_chain = CallNextInner(call_handler)
         if owner is not self:
             router_inner = [
@@ -176,7 +223,6 @@ class MaxBot(Router):
         for ifn in reversed(app_inner):
             inner_chain = self._wrap_inner(ifn, inner_chain, handler_fn, kwargs, context)
 
-        # Оборачиваем в router.outer (если хэндлер из роутера)
         async def run_inner() -> bool:
             await inner_chain()
             return True
@@ -193,7 +239,10 @@ class MaxBot(Router):
         return await router_outer_chain()
 
     async def feed_update(self, update: Update) -> bool:
-        """Прогнать один апдейт через middleware и хэндлеры."""
+        """Run a single update through all middleware and handlers.
+
+        Returns ``True`` if a handler was found and executed.
+        """
         context = self._build_context(update)
         token_bot = current_bot.set(self.bot)
         token_fsm = current_fsm_context.set(context.get(FSMContext))
@@ -214,17 +263,16 @@ class MaxBot(Router):
             current_bot.reset(token_bot)
             current_fsm_context.reset(token_fsm)
 
-    # --- long polling ---
-
     async def start_polling(
         self,
         *,
-        timeout: int = 30,
-        limit: int = 100,
-        types: list[str] | None = None,
+        timeout: Annotated[int, Doc("Long-poll server timeout in seconds.")] = 30,
+        limit: Annotated[int, Doc("Maximum updates per request.")] = 100,
+        types: Annotated[list[str] | None, Doc("Filter by update types.")] = None,
     ) -> None:
+        """Start the long-polling loop. Runs until :meth:`stop` is called or interrupted."""
         self.me = await self.bot.get_me()
-        logger.info("Бот запущен: @%s (id=%s)", self.me.username, self.me.user_id)
+        logger.info("Bot started: @%s (id=%s)", self.me.username, self.me.user_id)
         marker: int | None = None
         self._running = True
         try:
@@ -234,7 +282,7 @@ class MaxBot(Router):
                         limit=limit, timeout=timeout, marker=marker, types=types
                     )
                 except Exception:
-                    logger.exception("Ошибка при получении апдейтов, повтор через 3с")
+                    logger.exception("Error fetching updates, retrying in 3s")
                     await asyncio.sleep(3)
                     continue
                 for update in result.updates:
@@ -242,7 +290,7 @@ class MaxBot(Router):
                         await self.feed_update(update)
                     except Exception:
                         logger.exception(
-                            "Ошибка в обработчике апдейта %s", update.update_type
+                            "Unhandled error in handler for update %s", update.update_type
                         )
                 if result.marker is not None:
                     marker = result.marker
@@ -250,10 +298,12 @@ class MaxBot(Router):
             await self.bot.aclose()
 
     def stop(self) -> None:
+        """Signal the polling loop to stop after the current iteration."""
         self._running = False
 
     def run(self, **kwargs: Any) -> None:
+        """Start long-polling (blocking). Stops cleanly on ``KeyboardInterrupt``."""
         try:
             asyncio.run(self.start_polling(**kwargs))
         except KeyboardInterrupt:
-            logger.info("Остановка по Ctrl+C")
+            logger.info("Stopped by Ctrl+C")
