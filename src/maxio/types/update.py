@@ -9,12 +9,11 @@ from maxio.types.user import User
 
 
 class Update(BaseModel):
-    """Единая модель апдейта для всех типов событий MAX.
+    """Unified update model for all MAX event types.
 
-    Конкретный тип определяется полем `update_type`; относящиеся к нему поля
-    заполняются, остальные остаются `None`. Это сознательно плоская модель
-    (вместо 11 подклассов) — для v0.1 этого достаточно, а диспетчер маршрутизирует
-    по `update_type`.
+    The specific event type is determined by ``update_type``; related fields are
+    populated while the rest remain ``None``. This intentionally flat model avoids
+    11 subclasses — the dispatcher routes purely by ``update_type``.
     """
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
@@ -22,13 +21,10 @@ class Update(BaseModel):
     update_type: str
     timestamp: int | None = None
 
-    # message_created / message_edited / message_callback
     message: Message | None = None
-    # message_callback
     callback: Callback | None = None
     user_locale: str | None = None
 
-    # события с участником/ботом/чатом
     user: User | None = None
     chat_id: int | None = None
     user_id: int | None = None
@@ -43,5 +39,7 @@ class Update(BaseModel):
 
 
 class UpdateList(BaseModel):
+    """Response wrapper for the long-polling ``/updates`` endpoint."""
+
     updates: list[Update]
     marker: int | None = None
