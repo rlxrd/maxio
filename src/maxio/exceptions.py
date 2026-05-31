@@ -2,11 +2,11 @@ from __future__ import annotations
 
 
 class MaxError(Exception):
-    """Базовое исключение библиотеки."""
+    """Base exception for the maxio library."""
 
 
 class MaxApiError(MaxError):
-    """Ошибка, возвращённая сервером MAX Bot API."""
+    """Error returned by the MAX Bot API server."""
 
     def __init__(
         self,
