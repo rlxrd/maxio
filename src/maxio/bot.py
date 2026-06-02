@@ -1,61 +1,65 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import IO, Annotated, Any
+from typing import IO, Annotated, Any, TypeVar
 
 import httpx
 
 from maxio._docs import Doc
 from maxio._logging import install_token_masking
-from maxio.enums import TextFormat, UploadType
+from maxio.enums import ChatAction, TextFormat, UploadType
 from maxio.exceptions import MaxApiError, MaxError
 from maxio.keyboards import InlineKeyboard
-from maxio.types.chat import Chat
-from maxio.types.message import (
-    Message,
-    MessageList,
-    NewMessageLink,
-    SendMessageResult,
+from maxio.methods import (
+    AddChatAdmin,
+    AddChatMembers,
+    AnswerCallback,
+    DeleteChat,
+    DeleteMessage,
+    EditMessage,
+    GetBotChatMembership,
+    GetChat,
+    GetChatAdmins,
+    GetChatMembers,
+    GetChats,
+    GetMe,
+    GetMessage,
+    GetMessages,
+    GetPinnedMessage,
+    GetSubscriptions,
+    GetUpdates,
+    GetVideoInfo,
+    LeaveChat,
+    MaxMethod,
+    PinMessage,
+    RemoveChatAdmin,
+    RemoveChatMember,
+    SendChatAction,
+    SendMessage,
+    Subscribe,
+    UnpinMessage,
+    Unsubscribe,
+    UpdateChat,
 )
+from maxio.types.chat import Chat
+from maxio.types.member import ChatMember, ChatMemberList
+from maxio.types.message import Message, NewMessageLink
+from maxio.types.subscription import Subscription, SubscriptionList
 from maxio.types.update import UpdateList
 from maxio.types.user import BotInfo
+from maxio.types.video import VideoInfo
+
+T = TypeVar("T")
 
 DEFAULT_BASE_URL = "https://botapi.max.ru"
 
 
-def _normalize_attachments(
-    attachments: list[Any] | None,
-    keyboard: InlineKeyboard | None,
-) -> list[dict[str, Any]] | None:
-    result: list[dict[str, Any]] = []
-    for item in attachments or []:
-        result.append(item.as_attachment() if hasattr(item, "as_attachment") else item)
-    if keyboard is not None:
-        result.append(keyboard.as_attachment())
-    return result or None
-
-
-def _new_message_body(
-    text: str | None,
-    attachments: list[dict[str, Any]] | None,
-    link: NewMessageLink | None,
-    notify: bool,
-    format: TextFormat | str | None,
-) -> dict[str, Any]:
-    body: dict[str, Any] = {"notify": notify}
-    if text is not None:
-        body["text"] = text
-    if attachments is not None:
-        body["attachments"] = attachments
-    if link is not None:
-        body["link"] = link.model_dump()
-    if format is not None:
-        body["format"] = str(format)
-    return body
-
-
 class Bot:
     """Async MAX Bot API client built on top of httpx.
+
+    Acts as the executor for :class:`~maxio.methods.base.MaxMethod` instances.
+    Each high-level method (``send_message``, ``edit_message``, …) constructs
+    the corresponding method object and delegates to :meth:`__call__`.
 
     Example:
         ```python
@@ -121,6 +125,17 @@ class Bot:
             headers={"Authorization": token},
         )
 
+    async def __call__(self, method: MaxMethod[T]) -> T:
+        """Execute a :class:`~maxio.methods.base.MaxMethod` and return the parsed result."""
+        req = method.build_request()
+        data = await self._request(
+            req.http_method,
+            req.api_path,
+            params=req.params,
+            json=req.json_body,
+        )
+        return method.parse_response(data)
+
     async def _request(
         self,
         method: str,
@@ -147,157 +162,238 @@ class Bot:
 
     async def get_me(self) -> BotInfo:
         """Return information about the bot itself."""
-        data = await self._request("GET", "/me")
-        return BotInfo.model_validate(data)
+        return await self(GetMe())
 
     async def send_message(
         self,
-        text: Annotated[str | None, Doc("Message text.")] = None,
+        text: str | None = None,
         *,
-        chat_id: Annotated[int | None, Doc("Target chat ID.")] = None,
-        user_id: Annotated[int | None, Doc("Target user ID for direct messages.")] = None,
-        attachments: Annotated[list[Any] | None, Doc("List of attachment dicts.")] = None,
-        keyboard: Annotated[InlineKeyboard | None, Doc("Inline keyboard to attach.")] = None,
-        link: Annotated[NewMessageLink | None, Doc("Forward or reply link.")] = None,
-        notify: Annotated[bool, Doc("Send a push notification to recipients.")] = True,
-        format: Annotated[TextFormat | str | None, Doc("Text markup format.")] = None,
-        disable_link_preview: Annotated[bool | None, Doc("Disable link preview.")] = None,
+        chat_id: int | None = None,
+        user_id: int | None = None,
+        attachments: list[Any] | None = None,
+        keyboard: InlineKeyboard | None = None,
+        link: NewMessageLink | None = None,
+        notify: bool = True,
+        format: TextFormat | str | None = None,
+        disable_link_preview: bool | None = None,
     ) -> Message:
         """Send a message to a chat or user.
 
         Exactly one of ``chat_id`` or ``user_id`` must be provided.
         """
-        if chat_id is None and user_id is None:
-            raise ValueError("chat_id or user_id is required")
-        body = _new_message_body(
-            text,
-            _normalize_attachments(attachments, keyboard),
-            link,
-            notify,
-            format,
-        )
-        data = await self._request(
-            "POST",
-            "/messages",
-            params={
-                "chat_id": chat_id,
-                "user_id": user_id,
-                "disable_link_preview": disable_link_preview,
-            },
-            json=body,
-        )
-        return SendMessageResult.model_validate(data).message
+        return await self(SendMessage(
+            text=text,
+            chat_id=chat_id,
+            user_id=user_id,
+            attachments=attachments,
+            keyboard=keyboard,
+            link=link,
+            notify=notify,
+            format=format,
+            disable_link_preview=disable_link_preview,
+        ))
 
     async def edit_message(
         self,
-        message_id: Annotated[str, Doc("ID of the message to edit.")],
-        text: Annotated[str | None, Doc("New message text.")] = None,
+        message_id: str,
+        text: str | None = None,
         *,
-        attachments: Annotated[list[Any] | None, Doc("New attachment list.")] = None,
-        keyboard: Annotated[InlineKeyboard | None, Doc("New inline keyboard.")] = None,
-        link: Annotated[NewMessageLink | None, Doc("Forward or reply link.")] = None,
-        notify: Annotated[bool, Doc("Send a push notification.")] = True,
-        format: Annotated[TextFormat | str | None, Doc("Text markup format.")] = None,
+        attachments: list[Any] | None = None,
+        keyboard: InlineKeyboard | None = None,
+        link: NewMessageLink | None = None,
+        notify: bool = True,
+        format: TextFormat | str | None = None,
     ) -> bool:
         """Edit an existing message. Returns ``True`` on success."""
-        body = _new_message_body(
-            text,
-            _normalize_attachments(attachments, keyboard),
-            link,
-            notify,
-            format,
-        )
-        data = await self._request(
-            "PUT", "/messages", params={"message_id": message_id}, json=body
-        )
-        return bool(data.get("success", True)) if isinstance(data, dict) else True
+        return await self(EditMessage(
+            message_id=message_id,
+            text=text,
+            attachments=attachments,
+            keyboard=keyboard,
+            link=link,
+            notify=notify,
+            format=format,
+        ))
 
     async def delete_message(self, message_id: str) -> bool:
         """Delete a message by its ID. Returns ``True`` on success."""
-        data = await self._request("DELETE", "/messages", params={"message_id": message_id})
-        return bool(data.get("success", True)) if isinstance(data, dict) else True
+        return await self(DeleteMessage(message_id=message_id))
 
     async def get_message(self, message_id: str) -> Message:
         """Fetch a single message by its ID."""
-        data = await self._request("GET", f"/messages/{message_id}")
-        return Message.model_validate(data)
+        return await self(GetMessage(message_id=message_id))
 
     async def get_messages(
         self,
         *,
-        chat_id: Annotated[int | None, Doc("Filter by chat ID.")] = None,
-        message_ids: Annotated[list[str] | None, Doc("Fetch specific message IDs.")] = None,
-        from_time: Annotated[int | None, Doc("Start of time range (Unix ms).")] = None,
-        to_time: Annotated[int | None, Doc("End of time range (Unix ms).")] = None,
-        count: Annotated[int, Doc("Maximum number of messages to return.")] = 50,
+        chat_id: int | None = None,
+        message_ids: list[str] | None = None,
+        from_time: int | None = None,
+        to_time: int | None = None,
+        count: int = 50,
     ) -> list[Message]:
         """Fetch a list of messages from a chat."""
-        data = await self._request(
-            "GET",
-            "/messages",
-            params={
-                "chat_id": chat_id,
-                "message_ids": ",".join(message_ids) if message_ids else None,
-                "from": from_time,
-                "to": to_time,
-                "count": count,
-            },
-        )
-        return MessageList.model_validate(data).messages
+        return await self(GetMessages(
+            chat_id=chat_id,
+            message_ids=message_ids,
+            from_time=from_time,
+            to_time=to_time,
+            count=count,
+        ))
 
     async def answer_callback(
         self,
-        callback_id: Annotated[str, Doc("ID of the callback to answer.")],
+        callback_id: str,
         *,
-        notification: Annotated[str | None, Doc("Pop-up notification text.")] = None,
-        text: Annotated[str | None, Doc("Message text to send with the answer.")] = None,
-        attachments: Annotated[list[Any] | None, Doc("Attachments to include.")] = None,
-        keyboard: Annotated[InlineKeyboard | None, Doc("Inline keyboard to attach.")] = None,
-        format: Annotated[TextFormat | str | None, Doc("Text markup format.")] = None,
+        notification: str | None = None,
+        text: str | None = None,
+        attachments: list[Any] | None = None,
+        keyboard: InlineKeyboard | None = None,
+        format: TextFormat | str | None = None,
     ) -> bool:
         """Answer an inline button callback. Returns ``True`` on success."""
-        body: dict[str, Any] = {}
-        if notification is not None:
-            body["notification"] = notification
-        message_attachments = _normalize_attachments(attachments, keyboard)
-        if text is not None or message_attachments is not None:
-            body["message"] = _new_message_body(text, message_attachments, None, True, format)
-        data = await self._request(
-            "POST", "/answers", params={"callback_id": callback_id}, json=body
-        )
-        return bool(data.get("success", True)) if isinstance(data, dict) else True
+        return await self(AnswerCallback(
+            callback_id=callback_id,
+            notification=notification,
+            text=text,
+            attachments=attachments,
+            keyboard=keyboard,
+            format=format,
+        ))
 
     async def get_chats(
         self,
         *,
-        count: Annotated[int, Doc("Maximum number of chats to return.")] = 50,
-        marker: Annotated[int | None, Doc("Pagination marker from the previous response.")] = None,
+        count: int = 50,
+        marker: int | None = None,
     ) -> list[Chat]:
         """Return a list of chats the bot participates in."""
-        data = await self._request("GET", "/chats", params={"count": count, "marker": marker})
-        chats = data.get("chats", []) if isinstance(data, dict) else []
-        return [Chat.model_validate(c) for c in chats]
+        return await self(GetChats(count=count, marker=marker))
+
+    async def get_chat(self, chat_id: int) -> Chat:
+        """Get details of a specific chat."""
+        return await self(GetChat(chat_id=chat_id))
+
+    async def update_chat(
+        self,
+        chat_id: int,
+        *,
+        title: str | None = None,
+        icon: dict[str, Any] | None = None,
+        notify: bool | None = None,
+    ) -> Chat:
+        """Update chat title, icon or notification settings."""
+        return await self(UpdateChat(chat_id=chat_id, title=title, icon=icon, notify=notify))
+
+    async def delete_chat(self, chat_id: int) -> bool:
+        """Delete a group chat. Returns ``True`` on success."""
+        return await self(DeleteChat(chat_id=chat_id))
+
+    async def send_chat_action(
+        self,
+        chat_id: int,
+        action: ChatAction | str,
+    ) -> bool:
+        """Send a typing/activity indicator to a chat."""
+        return await self(SendChatAction(chat_id=chat_id, action=action))
+
+    async def get_pinned_message(self, chat_id: int) -> Message | None:
+        """Return the pinned message in a chat, or ``None`` if not set."""
+        return await self(GetPinnedMessage(chat_id=chat_id))
+
+    async def pin_message(
+        self,
+        chat_id: int,
+        message_id: str,
+        *,
+        notify: bool = True,
+    ) -> bool:
+        """Pin a message in a chat."""
+        return await self(PinMessage(chat_id=chat_id, message_id=message_id, notify=notify))
+
+    async def unpin_message(self, chat_id: int) -> bool:
+        """Unpin the pinned message in a chat."""
+        return await self(UnpinMessage(chat_id=chat_id))
+
+    async def get_chat_members(
+        self,
+        chat_id: int,
+        *,
+        count: int = 50,
+        marker: int | None = None,
+        user_ids: list[int] | None = None,
+    ) -> ChatMemberList:
+        """List members of a chat with pagination."""
+        return await self(GetChatMembers(
+            chat_id=chat_id, count=count, marker=marker, user_ids=user_ids
+        ))
+
+    async def add_chat_members(self, chat_id: int, user_ids: list[int]) -> bool:
+        """Add users to a chat."""
+        return await self(AddChatMembers(chat_id=chat_id, user_ids=user_ids))
+
+    async def remove_chat_member(
+        self,
+        chat_id: int,
+        user_id: int,
+        *,
+        block: bool = False,
+    ) -> bool:
+        """Remove a user from a chat."""
+        return await self(RemoveChatMember(chat_id=chat_id, user_id=user_id, block=block))
+
+    async def get_bot_chat_membership(self, chat_id: int) -> ChatMember:
+        """Check the bot's own membership status in a chat."""
+        return await self(GetBotChatMembership(chat_id=chat_id))
+
+    async def leave_chat(self, chat_id: int) -> bool:
+        """Remove the bot from a chat."""
+        return await self(LeaveChat(chat_id=chat_id))
+
+    async def get_chat_admins(self, chat_id: int) -> list[ChatMember]:
+        """List administrators of a chat."""
+        return await self(GetChatAdmins(chat_id=chat_id))
+
+    async def add_chat_admin(self, chat_id: int, user_id: int) -> bool:
+        """Grant admin rights to a chat member."""
+        return await self(AddChatAdmin(chat_id=chat_id, user_id=user_id))
+
+    async def remove_chat_admin(self, chat_id: int, user_id: int) -> bool:
+        """Revoke admin rights from a chat member."""
+        return await self(RemoveChatAdmin(chat_id=chat_id, user_id=user_id))
+
+    async def get_subscriptions(self) -> SubscriptionList:
+        """List all active webhook subscriptions."""
+        return await self(GetSubscriptions())
+
+    async def subscribe(
+        self,
+        url: str,
+        *,
+        update_types: list[str] | None = None,
+        version: str | None = None,
+    ) -> Subscription:
+        """Subscribe to bot events via webhook."""
+        return await self(Subscribe(url=url, update_types=update_types, version=version))
+
+    async def unsubscribe(self, url: str) -> bool:
+        """Remove a webhook subscription by URL."""
+        return await self(Unsubscribe(url=url))
+
+    async def get_video_info(self, video_token: str) -> VideoInfo:
+        """Fetch metadata for an uploaded video."""
+        return await self(GetVideoInfo(video_token=video_token))
 
     async def get_updates(
         self,
         *,
-        limit: Annotated[int, Doc("Maximum updates per request.")] = 100,
-        timeout: Annotated[int, Doc("Long-poll server timeout in seconds.")] = 30,
-        marker: Annotated[int | None, Doc("Sequence marker from the previous response.")] = None,
-        types: Annotated[list[str] | None, Doc("Filter by update types.")] = None,
+        limit: int = 100,
+        timeout: int = 30,
+        marker: int | None = None,
+        types: list[str] | None = None,
     ) -> UpdateList:
         """Long-poll the API for new updates."""
-        data = await self._request(
-            "GET",
-            "/updates",
-            params={
-                "limit": limit,
-                "timeout": timeout,
-                "marker": marker,
-                "types": ",".join(types) if types else None,
-            },
-        )
-        return UpdateList.model_validate(data)
+        return await self(GetUpdates(limit=limit, timeout=timeout, marker=marker, types=types))
 
     async def upload(
         self,
@@ -329,18 +425,13 @@ class Bot:
             file_data = file.read()
             fname = filename or getattr(file, "name", None) or "file"
 
-        endpoint = await self._request(
-            "POST", "/uploads", params={"type": str(upload_type)}
-        )
+        endpoint = await self._request("POST", "/uploads", params={"type": str(upload_type)})
         if not isinstance(endpoint, dict) or "url" not in endpoint:
             raise MaxError("Failed to get upload URL")
         upload_url: str = endpoint["url"]
         token_from_endpoint: str | None = endpoint.get("token")
 
-        response = await self._client.post(
-            upload_url,
-            files={"data": (fname, file_data)},
-        )
+        response = await self._client.post(upload_url, files={"data": (fname, file_data)})
         try:
             result: Any = response.json()
         except ValueError:
