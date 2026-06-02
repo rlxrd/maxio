@@ -32,14 +32,14 @@ logger = logging.getLogger("maxio")
 def _storage_key(update: Update) -> StorageKey | None:
     user_id: int | None = None
     chat_id: int | None = update.chat_id
-    if update.message is not None:
+    if update.callback is not None and update.callback.user is not None:
+        user_id = update.callback.user.user_id
+        if chat_id is None and update.message is not None:
+            chat_id = update.message.recipient.chat_id
+    elif update.message is not None:
         if update.message.sender is not None:
             user_id = update.message.sender.user_id
         if chat_id is None:
-            chat_id = update.message.recipient.chat_id
-    elif update.callback is not None and update.callback.user is not None:
-        user_id = update.callback.user.user_id
-        if chat_id is None and update.message is not None:
             chat_id = update.message.recipient.chat_id
     elif update.user is not None:
         user_id = update.user.user_id
