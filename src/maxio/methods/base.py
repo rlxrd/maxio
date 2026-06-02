@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generator, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
