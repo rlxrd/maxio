@@ -5,6 +5,7 @@
 ## Создание и подключение
 
 ```python
+import os
 from maxio import MaxBot, Router
 
 app = MaxBot(os.environ["MAX_TOKEN"])

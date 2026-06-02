@@ -6,11 +6,19 @@
 pip install maxio
 ```
 
+Python 3.10+. Зависимости устанавливаются автоматически: `httpx`, `pydantic`.
+
 ## Получить токен
 
-1. Откройте MAX и найдите [@MasterBot](https://max.ru/MasterBot)
-2. Нажмите «Начать» и следуйте инструкциям
-3. Скопируйте токен
+1. Открой MAX и найди [@MasterBot](https://max.ru/MasterBot)
+2. Нажми «Начать» и следуй инструкциям
+3. Скопируй токен
+
+!!! warning "Не коммить токен"
+    Храни токен в переменной окружения, а не в коде:
+    ```bash
+    export MAX_TOKEN="твой_токен_здесь"
+    ```
 
 ## Минимальный бот
 
@@ -31,47 +39,64 @@ if __name__ == "__main__":
 ```
 
 ```bash
-MAX_TOKEN=<токен> python bot.py
+python bot.py
 ```
 
 ## Кнопка «Начать»
 
-В MAX синяя кнопка **Start** не отправляет текст `/start` — она шлёт отдельное событие `bot_started`. Для него есть отдельный декоратор:
+!!! warning "bot_started ≠ /start"
+    В MAX синяя кнопка Start шлёт событие `bot_started`, а **не** текст `/start`.
+    Используй `@app.bot_started()` — это отдельный декоратор.
 
 ```python
-from maxio import MaxBot, Update, Bot
+import os
+from maxio import Bot, MaxBot, Update
 
 app = MaxBot(os.environ["MAX_TOKEN"])
 
 
 @app.bot_started()
 async def on_start(update: Update, bot: Bot) -> None:
+    # update.chat_id — чат, update.payload — deep link (если был)
     await bot.send_message("Привет! Напиши /help", chat_id=update.chat_id)
-```
 
-!!! tip "Почему не `message`?"
-    `bot_started` не несёт объект `Message` — только `update.user`, `update.chat_id`,
-    и опционально `update.payload` (deep link). Отвечать нужно через `bot.send_message`.
+
+if __name__ == "__main__":
+    app.run()
+```
 
 ## Команды
 
 ```python
-from maxio import Command, Message
+import os
+from maxio import Command, MaxBot, Message
+
+app = MaxBot(os.environ["MAX_TOKEN"])
+
 
 @app.message(Command("help"))
 async def cmd_help(message: Message) -> None:
     await message.answer("Команды: /help /about")
 
+
 @app.message(Command("about"))
 async def cmd_about(message: Message) -> None:
     await message.answer("Бот на фреймворке maxio")
+
+
+if __name__ == "__main__":
+    app.run()
 ```
 
 ## Кнопки
 
 ```python
-from maxio import InlineKeyboard, Callback, F
+import os
+from maxio import Callback, Command, F, InlineKeyboard, MaxBot, Message
 from maxio.keyboards import Button
+
+app = MaxBot(os.environ["MAX_TOKEN"])
+
 
 @app.message(Command("menu"))
 async def cmd_menu(message: Message) -> None:
@@ -81,18 +106,73 @@ async def cmd_menu(message: Message) -> None:
     )
     await message.answer("Выбери:", keyboard=kb)
 
+
 @app.callback(F.data == "yes")
 async def on_yes(callback: Callback) -> None:
-    await callback.answer(notification="Ты нажал «Да»!")
+    if callback.message:
+        await callback.message.answer("Ты нажал «Да»!")
+
 
 @app.callback(F.data == "no")
 async def on_no(callback: Callback) -> None:
-    await callback.answer(notification="Ты нажал «Нет»!")
+    if callback.message:
+        await callback.message.answer("Ты нажал «Нет»!")
+
+
+if __name__ == "__main__":
+    app.run()
 ```
+
+!!! note "callback.answer vs callback.message.answer"
+    `callback.answer(notification=...)` — всплывающее уведомление (MAX может не показывать).
+    `callback.message.answer(...)` — обычное сообщение в чат, всегда отображается.
+
+## Форматирование текста
+
+MAX поддерживает Markdown и HTML через параметр `format`:
+
+=== "Markdown"
+
+    ```python
+    import os
+    from maxio import MaxBot, Message
+    from maxio.enums import TextFormat
+
+    app = MaxBot(os.environ["MAX_TOKEN"])
+
+
+    @app.message()
+    async def handler(message: Message) -> None:
+        await message.answer(
+            "**Жирный** _курсив_ `код`\n[Ссылка](https://max.ru)",
+            format=TextFormat.MARKDOWN,
+        )
+    ```
+
+=== "HTML"
+
+    ```python
+    import os
+    from maxio import MaxBot, Message
+    from maxio.enums import TextFormat
+
+    app = MaxBot(os.environ["MAX_TOKEN"])
+
+
+    @app.message()
+    async def handler(message: Message) -> None:
+        await message.answer(
+            "<b>Жирный</b> <i>курсив</i> <code>код</code>",
+            format=TextFormat.HTML,
+        )
+    ```
+
+`format` работает в `message.answer()`, `message.reply()`, `bot.send_message()` и `bot.edit_message()`.
 
 ## Следующие шаги
 
 - [Хэндлеры](handlers.md) — все 11 типов событий
-- [Фильтры и F](filters.md) — фильтровать сообщения по тексту, медиа, payload
-- [DI — зависимости](di.md) — что можно инжектировать и когда
+- [Фильтры и F](filters.md) — фильтровать по тексту, медиа, payload
+- [DI — зависимости](di.md) — что инжектируется и когда
 - [FSM](fsm.md) — многошаговые диалоги
+- [Управление чатами](chats.md) — участники, админы, вебхуки

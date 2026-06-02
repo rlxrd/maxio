@@ -10,6 +10,8 @@ async def greet(message: Message, bot: Bot) -> None:
 
 Никаких `context["bot"]`, никакого `middleware_data`. Просто типы.
 
+---
+
 ## Установка
 
 ```bash
@@ -38,7 +40,7 @@ async def on_start(update: Update, bot: Bot) -> None:
     await bot.send_message("Привет!", chat_id=update.chat_id, keyboard=kb)
 
 
-@app.message(F.text == "/help")
+@app.message(Command("help"))
 async def help_cmd(message: Message) -> None:
     await message.answer("Это бот на maxio!")
 
@@ -61,16 +63,21 @@ if __name__ == "__main__":
 MAX_TOKEN=<ваш_токен> python bot.py
 ```
 
-## Что умеет
+---
 
-- Long polling с автоматическим переподключением
-- **Все 11 типов событий** MAX Bot API — именованный декоратор для каждого
+## Возможности
+
+- **Все 28 эндпоинтов** MAX Bot API — полное покрытие
+- **Все 11 типов событий** — именованный декоратор для каждого
 - **F (MagicFilter)** — `F.text == "да"`, `F.photo`, `F.data.in_(...)`
-- **DI по аннотациям** — `message: Message`, `bot: Bot`, `fsm: FSMContext` без лишнего кода
+- **DI по аннотациям** — `message: Message`, `bot: Bot`, `fsm: FSMContext`
 - **Optional в DI** — `Message | None` вместо ошибки, если тип недоступен
-- **Middleware** (outer / inner) с полным DI на `MaxBot` и `Router`
+- **MaxMethod** — каждый API-метод — отдельная Pydantic-модель
+- **Middleware** (outer / inner) с полным DI
 - **Роутеры** — разбивка хэндлеров по модулям
 - **FSM** — диалоги с состоянием, `MemoryStorage` из коробки
+- **Управление чатами** — участники, админы, закрепление, действия
+- **Вебхуки** — подписка / отписка через API
 - **Медиа** — загрузка и приём фото / видео / аудио / файлов
-- **Клавиатуры** — callback / link / request_contact / request_geo_location
+- **Клавиатуры** — 6 типов кнопок
 - Pydantic v2, `py.typed`, `mypy --strict` ✅

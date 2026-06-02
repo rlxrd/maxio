@@ -2,6 +2,14 @@
 
 Middleware — callable-объект или функция, которая оборачивает обработку апдейта.
 
+!!! note "Предполагаемый setup"
+    Во всех примерах подразумевается:
+    ```python
+    import os
+    from maxio import MaxBot
+    app = MaxBot(os.environ["MAX_TOKEN"])
+    ```
+
 ## Порядок выполнения
 
 ```
