@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from annotated_doc import Doc
-
+from maxio._docs import Doc
 from maxio.enums import ButtonType, Intent
 
 ButtonDict = dict[str, Any]

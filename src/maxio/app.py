@@ -4,8 +4,7 @@ import asyncio
 import logging
 from typing import Annotated, Any
 
-from annotated_doc import Doc
-
+from maxio._docs import Doc
 from maxio._runtime import current_bot
 from maxio.bot import Bot
 from maxio.filters import Filter, FilterFunc, apply_filter

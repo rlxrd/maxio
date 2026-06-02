@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class Callback(BaseModel):
-    """Нажатие inline-кнопки. Содержит данные нажатия и исходное сообщение."""
+    """Inline button press. Contains callback data and the source message."""
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
@@ -36,7 +36,7 @@ class Callback(BaseModel):
         attachments: list[Any] | None = None,
         format: TextFormat | str | None = None,
     ) -> bool:
-        """Ответить на нажатие: показать всплывающее уведомление и/или изменить сообщение."""
+        """Answer the press with a notification and/or message update."""
         from maxio._runtime import get_current_bot
 
         return await get_current_bot().answer_callback(

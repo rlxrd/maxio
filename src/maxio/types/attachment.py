@@ -43,7 +43,7 @@ class FileAttachmentPayload(BaseModel):
 
 
 class Attachment(BaseModel):
-    """Входящее вложение. Конкретный payload парсится через as_image/video/audio/file."""
+    """Incoming attachment. Use as_image/video/audio/file to parse the concrete payload."""
 
     model_config = ConfigDict(extra="allow")
 

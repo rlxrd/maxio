@@ -104,7 +104,7 @@ class Message(BaseModel):
         notify: bool = True,
         format: TextFormat | str | None = None,
     ) -> Message:
-        """Отправить новое сообщение в тот же чат/диалог."""
+        """Send a new message to the same chat or dialog."""
         from maxio._runtime import get_current_bot
 
         return await get_current_bot().send_message(
@@ -126,11 +126,11 @@ class Message(BaseModel):
         notify: bool = True,
         format: TextFormat | str | None = None,
     ) -> Message:
-        """Ответить на это сообщение (с цитированием)."""
+        """Reply to this message with a quote link."""
         from maxio._runtime import get_current_bot
 
         if self.mid is None:
-            raise ValueError("Невозможно ответить на сообщение без mid")
+            raise ValueError("Cannot reply to a message without mid")
         return await get_current_bot().send_message(
             text,
             chat_id=self.recipient.chat_id,

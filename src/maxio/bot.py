@@ -4,8 +4,8 @@ from pathlib import Path
 from typing import IO, Annotated, Any
 
 import httpx
-from annotated_doc import Doc
 
+from maxio._docs import Doc
 from maxio._logging import install_token_masking
 from maxio.enums import TextFormat, UploadType
 from maxio.exceptions import MaxApiError, MaxError

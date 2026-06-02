@@ -25,7 +25,6 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "annotated-doc>=0.0.4",
     "httpx>=0.27",
     "pydantic>=2",
 ]

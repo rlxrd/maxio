@@ -215,3 +215,21 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 .DS_Store
+
+# Local agent/private notes
+CLAUDE.md
+.claude/
+
+# Local secrets
+.env.*
+*.token
+
+# Changelog drafts
+chlog_*
+ch0*.md
+
+# IDE/editor local files
+.idea/
+.vscode/
+*.swp
+*.swo
