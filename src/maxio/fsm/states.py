@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 class State:
-    """Одно состояние FSM. Ключ присваивается автоматически через __set_name__."""
+    """A single FSM state. The key is assigned automatically via ``__set_name__``."""
 
     key: str
 
@@ -14,4 +14,12 @@ class State:
 
 
 class StatesGroup:
-    """Группа состояний — пространство имён. State.__set_name__ делает всё сам."""
+    """Namespace for a group of related FSM states.
+
+    Example:
+        ```python
+        class Form(StatesGroup):
+            name = State()
+            age  = State()
+        ```
+    """

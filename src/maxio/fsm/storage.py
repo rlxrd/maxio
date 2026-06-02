@@ -4,12 +4,16 @@ from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 
 class StorageKey(NamedTuple):
+    """Composite key identifying a specific user/chat FSM slot."""
+
     user_id: int
     chat_id: int | None
 
 
 @runtime_checkable
 class BaseStorage(Protocol):
+    """Protocol for FSM state storage backends."""
+
     async def get_state(self, key: StorageKey) -> str | None: ...
     async def set_state(self, key: StorageKey, state: str | None) -> None: ...
     async def get_data(self, key: StorageKey) -> dict[str, Any]: ...
@@ -18,7 +22,7 @@ class BaseStorage(Protocol):
 
 
 class MemoryStorage:
-    """In-memory хранилище. Состояние теряется при рестарте бота."""
+    """In-memory FSM storage. State is lost when the bot restarts."""
 
     def __init__(self) -> None:
         self._states: dict[StorageKey, str] = {}

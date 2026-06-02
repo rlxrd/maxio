@@ -12,7 +12,7 @@ _signature_cache: dict[Callable[..., Any], list[tuple[str, Any, Any]]] = {}
 
 
 def get_handler_params(fn: Callable[..., Any]) -> list[tuple[str, Any, Any]]:
-    """Возвращает [(имя_параметра, аннотация_типа, значение_по_умолчанию)], с кэшированием."""
+    """Return ``[(param_name, type_annotation, default)]`` for every parameter of *fn*, cached."""
     cached = _signature_cache.get(fn)
     if cached is not None:
         return cached
@@ -31,7 +31,7 @@ def get_handler_params(fn: Callable[..., Any]) -> list[tuple[str, Any, Any]]:
 
 
 def _unwrap_optional(annotation: Any) -> tuple[bool, Any]:
-    """Возвращает (is_optional, inner_type) для Optional[X] и X | None."""
+    """Return ``(is_optional, inner_type)`` for ``Optional[X]`` and ``X | None``."""
     origin = get_origin(annotation)
     if origin is Union:
         args = get_args(annotation)
@@ -62,7 +62,7 @@ def resolve_kwargs(
     fn: Callable[..., Any],
     context: dict[type, Any],
 ) -> dict[str, Any]:
-    """Сопоставляет аргументы хэндлера с объектами контекста по аннотациям типов."""
+    """Map handler arguments to context objects by type annotation."""
     kwargs: dict[str, Any] = {}
     for name, annotation, default in get_handler_params(fn):
         is_optional, inner = _unwrap_optional(annotation)
@@ -75,9 +75,9 @@ def resolve_kwargs(
                 continue
             type_name = getattr(inner, "__name__", inner)
             raise MaxError(
-                f"Не удалось внедрить аргумент '{name}: {type_name}' в хэндлер "
-                f"{fn.__name__!r}: такой тип недоступен для этого апдейта. "
-                f"Доступны: {[getattr(t, '__name__', t) for t in context]}."
+                f"Cannot inject argument '{name}: {type_name}' into handler "
+                f"{fn.__name__!r}: that type is not available for this update. "
+                f"Available: {[getattr(t, '__name__', t) for t in context]}."
             )
         kwargs[name] = value
     return kwargs

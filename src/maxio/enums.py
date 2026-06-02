@@ -4,13 +4,15 @@ from enum import Enum
 
 
 class StrEnum(str, Enum):
-    """str-based enum: значение сравнивается и сериализуется как обычная строка."""
+    """String-based enum: values compare and serialize as plain strings."""
 
     def __str__(self) -> str:
         return str(self.value)
 
 
 class UpdateType(StrEnum):
+    """All event types delivered by the MAX Bot API long-polling endpoint."""
+
     MESSAGE_CREATED = "message_created"
     MESSAGE_CALLBACK = "message_callback"
     MESSAGE_EDITED = "message_edited"
@@ -25,12 +27,16 @@ class UpdateType(StrEnum):
 
 
 class ChatType(StrEnum):
+    """Type of a MAX chat."""
+
     DIALOG = "dialog"
     CHAT = "chat"
     CHANNEL = "channel"
 
 
 class ChatStatus(StrEnum):
+    """Membership status of the bot in a chat."""
+
     ACTIVE = "active"
     REMOVED = "removed"
     LEFT = "left"
@@ -39,11 +45,15 @@ class ChatStatus(StrEnum):
 
 
 class TextFormat(StrEnum):
+    """Markup format for outgoing message text."""
+
     MARKDOWN = "markdown"
     HTML = "html"
 
 
 class ButtonType(StrEnum):
+    """Inline button interaction type."""
+
     CALLBACK = "callback"
     LINK = "link"
     REQUEST_CONTACT = "request_contact"
@@ -53,17 +63,23 @@ class ButtonType(StrEnum):
 
 
 class Intent(StrEnum):
+    """Visual intent (color) of a callback button."""
+
     POSITIVE = "positive"
     NEGATIVE = "negative"
     DEFAULT = "default"
 
 
 class MessageLinkType(StrEnum):
+    """Relationship between a linked message and the current one."""
+
     FORWARD = "forward"
     REPLY = "reply"
 
 
 class UploadType(StrEnum):
+    """Media type for the file upload endpoint."""
+
     IMAGE = "image"
     VIDEO = "video"
     AUDIO = "audio"

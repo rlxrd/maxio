@@ -8,7 +8,7 @@ Handler = Callable[..., Awaitable[Any]]
 
 
 class CallNextOuter:
-    """Вызов следующего шага в outer middleware."""
+    """Callable that advances to the next step in the outer middleware chain."""
 
     __slots__ = ("_fn",)
 
@@ -20,7 +20,7 @@ class CallNextOuter:
 
 
 class CallNextInner:
-    """Вызов следующего шага в inner middleware."""
+    """Callable that advances to the next step in the inner middleware chain."""
 
     __slots__ = ("_fn",)
 
@@ -32,7 +32,7 @@ class CallNextInner:
 
 
 class HandlerKwargs(dict):  # type: ignore[type-arg]
-    """Разрешённые аргументы хэндлера — инжектируются в inner middleware по типу."""
+    """Resolved handler arguments injected into inner middleware by type."""
 
 
 OuterMiddlewareFn = Callable[..., Awaitable[bool]]

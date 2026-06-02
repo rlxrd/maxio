@@ -6,16 +6,18 @@ from typing import Protocol, runtime_checkable
 
 from maxio.types.update import Update
 
-# Фильтр — это либо объект с методом check, либо простой callable(Update) -> bool.
 FilterFunc = Callable[[Update], bool | Awaitable[bool]]
 
 
 @runtime_checkable
 class Filter(Protocol):
+    """Protocol for class-based filters with an async ``check`` method."""
+
     async def check(self, update: Update) -> bool: ...
 
 
 async def apply_filter(flt: Filter | FilterFunc, update: Update) -> bool:
+    """Run a filter (class-based or callable) against an update and return the result."""
     if isinstance(flt, Filter):
         return await flt.check(update)
     result = flt(update)
@@ -25,7 +27,7 @@ async def apply_filter(flt: Filter | FilterFunc, update: Update) -> bool:
 
 
 class Command:
-    """Совпадает, если текст сообщения начинается с одной из команд (например `/start`)."""
+    """Matches if the message text starts with one of the given commands (e.g. ``/start``)."""
 
     def __init__(self, *commands: str, prefix: str = "/") -> None:
         self.prefix = prefix
@@ -35,14 +37,13 @@ class Command:
         text = update.message.text if update.message else None
         if not text or not text.startswith(self.prefix):
             return False
-        first = text[len(self.prefix) :].split(maxsplit=1)[0]
-        # отбрасываем возможный @botname
+        first = text[len(self.prefix):].split(maxsplit=1)[0]
         command = first.split("@", 1)[0]
         return command in self.commands
 
 
 class CallbackPayload:
-    """Совпадает, если payload нажатой кнопки равен одному из заданных значений."""
+    """Matches if the pressed button's payload equals one of the given values."""
 
     def __init__(self, *payloads: str) -> None:
         self.payloads = set(payloads)
@@ -54,11 +55,11 @@ class CallbackPayload:
 
 
 class HasMedia:
-    """Совпадает, если сообщение содержит вложения указанных типов.
+    """Matches if the message contains attachments of the specified types.
 
-    Без аргументов — любое вложение. С аргументами — хотя бы одно совпадение.
+    Without arguments matches any attachment. With arguments matches at least one.
 
-    Примеры типов: "image", "video", "audio", "file".
+    Common type strings: ``"image"``, ``"video"``, ``"audio"``, ``"file"``.
     """
 
     def __init__(self, *types: str) -> None:

@@ -12,16 +12,16 @@ def _has_attachment(update: Update, media_type: str) -> bool:
 
 
 _SHORTCUTS: dict[str, Any] = {
-    "text":         lambda u: u.message.text if u.message else None,
-    "data":         lambda u: u.callback.payload if u.callback else None,
-    "payload":      lambda u: u.payload,
+    "text":          lambda u: u.message.text if u.message else None,
+    "data":          lambda u: u.callback.payload if u.callback else None,
+    "payload":       lambda u: u.payload,
     "start_payload": lambda u: u.start_payload,
-    "photo":        lambda u: _has_attachment(u, "image"),
-    "image":        lambda u: _has_attachment(u, "image"),
-    "video":        lambda u: _has_attachment(u, "video"),
-    "audio":        lambda u: _has_attachment(u, "audio"),
-    "file":         lambda u: _has_attachment(u, "file"),
-    "document":     lambda u: _has_attachment(u, "file"),
+    "photo":         lambda u: _has_attachment(u, "image"),
+    "image":         lambda u: _has_attachment(u, "image"),
+    "video":         lambda u: _has_attachment(u, "video"),
+    "audio":         lambda u: _has_attachment(u, "audio"),
+    "file":          lambda u: _has_attachment(u, "file"),
+    "document":      lambda u: _has_attachment(u, "file"),
 }
 
 
@@ -109,7 +109,21 @@ class _NotFilter(_BaseFilter):
 
 
 class MagicFilter(_BaseFilter):
-    """Ленивый фильтр-выражение. Используй корневой объект F."""
+    """Lazy expression filter. Use the root object ``F`` to build filter expressions.
+
+    Example:
+        ```python
+        from maxio import F
+
+        @bot.message(F.text == "hello")
+        async def hello_handler(message: Message) -> None:
+            await message.answer("Hi!")
+
+        @bot.message(F.text.startswith("/"))
+        async def command_catch(message: Message) -> None:
+            ...
+        ```
+    """
 
     __slots__ = ("_path",)
 
@@ -128,18 +142,23 @@ class MagicFilter(_BaseFilter):
     __hash__ = None  # type: ignore[assignment]
 
     def in_(self, *values: Any) -> _OpFilter:
+        """Match if the field value is one of *values*."""
         return _OpFilter(self._path, "in", values)
 
     def not_in_(self, *values: Any) -> _OpFilter:
+        """Match if the field value is not in *values*."""
         return _OpFilter(self._path, "not_in", values)
 
     def startswith(self, prefix: str) -> _OpFilter:
+        """Match if the string field starts with *prefix*."""
         return _OpFilter(self._path, "startswith", prefix)
 
     def endswith(self, suffix: str) -> _OpFilter:
+        """Match if the string field ends with *suffix*."""
         return _OpFilter(self._path, "endswith", suffix)
 
     def contains(self, substr: str) -> _OpFilter:
+        """Match if *substr* is found within the field value."""
         return _OpFilter(self._path, "contains", substr)
 
     async def check(self, update: Update) -> bool:
@@ -147,3 +166,4 @@ class MagicFilter(_BaseFilter):
 
 
 F = MagicFilter()
+"""Root magic filter object. Chain attribute access and comparisons to build expressions."""
