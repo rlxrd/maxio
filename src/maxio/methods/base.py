@@ -50,6 +50,6 @@ class MaxMethod(BaseModel, Generic[T]):
         """Execute this method using *bot* and return the parsed result."""
         return await bot(self)
 
-    def __await__(self):
+    def __await__(self) -> Generator[Any, None, T]:
         from maxio._runtime import get_current_bot
         return self.emit(get_current_bot()).__await__()
