@@ -84,7 +84,10 @@ await bot.answer_callback(
 ### Чаты
 
 ```python
-chats = await bot.get_chats(count=50)
+result = await bot.get_chats(count=50)
+# result.chats  → list[Chat]
+# result.marker → int | None  (для пагинации)
+chats = result.chats
 chat  = await bot.get_chat(chat_id)
 chat  = await bot.update_chat(chat_id, title="Новое название", notify=True)
 await bot.delete_chat(chat_id)
@@ -117,15 +120,15 @@ await bot.leave_chat(chat_id)
 
 ```python
 admins = await bot.get_chat_admins(chat_id)        # → list[ChatMember]
-await bot.add_chat_admin(chat_id, user_id)
+await bot.add_chat_admin(chat_id, user_id, permissions=["write", "delete_messages"])
 await bot.remove_chat_admin(chat_id, user_id)
 ```
 
 ### Вебхуки
 
 ```python
-subs = await bot.get_subscriptions()               # → SubscriptionList
-sub  = await bot.subscribe(url, update_types=[...])
+subs    = await bot.get_subscriptions()              # → SubscriptionList
+success = await bot.subscribe(url, update_types=[...])  # → bool
 await bot.unsubscribe(url)
 ```
 
@@ -168,7 +171,7 @@ await callback.answer(notification="Текст уведомления")
 await callback.answer()   # без уведомления
 ```
 
-`callback.message` — сообщение, к которому привязана кнопка.  
+`callback.message` — сообщение, к которому привязана кнопка.
 `callback.payload` — строка payload из `Button.callback(...)`.
 
 ---
@@ -203,7 +206,7 @@ sub.version          # str | None
 from maxio.types.video import VideoInfo
 
 info.token
-info.url
+info.urls        # dict[str, str] | None  — ключи: mp4_1080, mp4_720 и т.д.
 info.width
 info.height
 info.duration        # секунды
