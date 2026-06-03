@@ -28,3 +28,10 @@ class Chat(BaseModel):
     description: str | None = None
     dialog_with_user: User | None = None
     messages_count: int | None = None
+
+
+class ChatList(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    chats: list[Chat] = []
+    marker: int | None = None

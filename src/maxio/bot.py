@@ -41,17 +41,15 @@ from maxio.methods import (
     Unsubscribe,
     UpdateChat,
 )
-from maxio.types.chat import Chat
+from maxio.types.chat import Chat, ChatList
 from maxio.types.member import ChatMember, ChatMemberList
 from maxio.types.message import Message, NewMessageLink
-from maxio.types.subscription import Subscription, SubscriptionList
+from maxio.types.subscription import SubscriptionList
 from maxio.types.update import UpdateList
 from maxio.types.user import BotInfo
 from maxio.types.video import VideoInfo
 
 T = TypeVar("T")
-
-DEFAULT_BASE_URL = "https://botapi.max.ru"
 
 
 class Bot:
@@ -70,6 +68,8 @@ class Bot:
         await bot.aclose()
         ```
     """
+
+    BASE_URL = "https://botapi.max.ru"
 
     def __init__(
         self,
@@ -120,7 +120,7 @@ class Bot:
         if mask_token_in_logs:
             install_token_masking()
         self._client = client or httpx.AsyncClient(
-            base_url=DEFAULT_BASE_URL,
+            base_url=self.BASE_URL,
             timeout=timeout,
             headers={"Authorization": token},
         )
@@ -266,8 +266,8 @@ class Bot:
         *,
         count: int = 50,
         marker: int | None = None,
-    ) -> list[Chat]:
-        """Return a list of chats the bot participates in."""
+    ) -> ChatList:
+        """Return a paginated list of chats the bot participates in."""
         return await self(GetChats(count=count, marker=marker))
 
     async def get_chat(self, chat_id: int) -> Chat:
@@ -354,9 +354,15 @@ class Bot:
         """List administrators of a chat."""
         return await self(GetChatAdmins(chat_id=chat_id))
 
-    async def add_chat_admin(self, chat_id: int, user_id: int) -> bool:
+    async def add_chat_admin(
+        self,
+        chat_id: int,
+        user_id: int,
+        *,
+        permissions: list[str] | None = None,
+    ) -> bool:
         """Grant admin rights to a chat member."""
-        return await self(AddChatAdmin(chat_id=chat_id, user_id=user_id))
+        return await self(AddChatAdmin(chat_id=chat_id, user_id=user_id, permissions=permissions))
 
     async def remove_chat_admin(self, chat_id: int, user_id: int) -> bool:
         """Revoke admin rights from a chat member."""
@@ -372,8 +378,8 @@ class Bot:
         *,
         update_types: list[str] | None = None,
         version: str | None = None,
-    ) -> Subscription:
-        """Subscribe to bot events via webhook."""
+    ) -> bool:
+        """Subscribe to bot events via webhook. Returns ``True`` on success."""
         return await self(Subscribe(url=url, update_types=update_types, version=version))
 
     async def unsubscribe(self, url: str) -> bool:

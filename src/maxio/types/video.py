@@ -9,7 +9,7 @@ class VideoInfo(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="allow")
 
     token: str | None = None
-    url: str | None = None
+    urls: dict[str, str] | None = None
     thumbnail: str | None = None
     width: int | None = None
     height: int | None = None

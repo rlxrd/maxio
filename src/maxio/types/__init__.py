@@ -8,7 +8,7 @@ from maxio.types.attachment import (
     VideoAttachmentPayload,
 )
 from maxio.types.callback import Callback
-from maxio.types.chat import Chat, Image
+from maxio.types.chat import Chat, ChatList, Image
 from maxio.types.message import (
     LinkedMessage,
     Message,
@@ -30,6 +30,7 @@ __all__ = [
     "BotInfo",
     "Callback",
     "Chat",
+    "ChatList",
     "Image",
     "LinkedMessage",
     "Message",

@@ -4,13 +4,12 @@ from typing import Any
 
 from maxio.enums import ChatAction
 from maxio.methods.base import MaxMethod, MaxRequest
-from maxio.types.chat import Chat
+from maxio.types.chat import Chat, ChatList
 from maxio.types.member import ChatMember, ChatMemberList
 from maxio.types.message import Message
 
 
-class GetChats(MaxMethod[list[Chat]]):
-    """Return a list of chats the bot participates in."""
+class GetChats(MaxMethod[ChatList]):
 
     count: int = 50
     marker: int | None = None
@@ -22,9 +21,8 @@ class GetChats(MaxMethod[list[Chat]]):
             params={"count": self.count, "marker": self.marker},
         )
 
-    def parse_response(self, data: Any) -> list[Chat]:
-        chats = data.get("chats", []) if isinstance(data, dict) else []
-        return [Chat.model_validate(c) for c in chats]
+    def parse_response(self, data: Any) -> ChatList:
+        return ChatList.model_validate(data if isinstance(data, dict) else {})
 
 
 class GetChat(MaxMethod[Chat]):
@@ -232,8 +230,8 @@ class GetChatAdmins(MaxMethod[list[ChatMember]]):
         return MaxRequest(http_method="GET", api_path=f"/chats/{self.chat_id}/members/admins")
 
     def parse_response(self, data: Any) -> list[ChatMember]:
-        admins = data.get("admins", []) if isinstance(data, dict) else []
-        return [ChatMember.model_validate(a) for a in admins]
+        members = data.get("members", []) if isinstance(data, dict) else []
+        return [ChatMember.model_validate(m) for m in members]
 
 
 class AddChatAdmin(MaxMethod[bool]):
@@ -241,12 +239,16 @@ class AddChatAdmin(MaxMethod[bool]):
 
     chat_id: int
     user_id: int
+    permissions: list[str] | None = None
 
     def build_request(self) -> MaxRequest:
+        admin: dict[str, Any] = {"user_id": self.user_id}
+        if self.permissions is not None:
+            admin["permissions"] = self.permissions
         return MaxRequest(
             http_method="POST",
             api_path=f"/chats/{self.chat_id}/members/admins",
-            json_body={"user_id": self.user_id},
+            json_body={"admins": [admin]},
         )
 
     def parse_response(self, data: Any) -> bool:
