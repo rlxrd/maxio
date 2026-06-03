@@ -225,9 +225,15 @@ class GetChatAdmins(MaxMethod[list[ChatMember]]):
     """List administrators of a chat."""
 
     chat_id: int
+    count: int = 50
+    marker: int | None = None
 
     def build_request(self) -> MaxRequest:
-        return MaxRequest(http_method="GET", api_path=f"/chats/{self.chat_id}/members/admins")
+        return MaxRequest(
+            http_method="GET",
+            api_path=f"/chats/{self.chat_id}/members/admins",
+            params={"count": self.count, "marker": self.marker},
+        )
 
     def parse_response(self, data: Any) -> list[ChatMember]:
         members = data.get("members", []) if isinstance(data, dict) else []
@@ -240,11 +246,14 @@ class AddChatAdmin(MaxMethod[bool]):
     chat_id: int
     user_id: int
     permissions: list[str] | None = None
+    alias: str | None = None
 
     def build_request(self) -> MaxRequest:
         admin: dict[str, Any] = {"user_id": self.user_id}
         if self.permissions is not None:
             admin["permissions"] = self.permissions
+        if self.alias is not None:
+            admin["alias"] = self.alias
         return MaxRequest(
             http_method="POST",
             api_path=f"/chats/{self.chat_id}/members/admins",
@@ -269,3 +278,15 @@ class RemoveChatAdmin(MaxMethod[bool]):
 
     def parse_response(self, data: Any) -> bool:
         return bool(data.get("success", True)) if isinstance(data, dict) else True
+
+
+class GetChatByLink(MaxMethod[Chat]):
+    """Get chat or channel info by its public link (e.g. ``@channelname``)."""
+
+    chat_link: str
+
+    def build_request(self) -> MaxRequest:
+        return MaxRequest(http_method="GET", api_path=f"/chats/{self.chat_link}")
+
+    def parse_response(self, data: Any) -> Chat:
+        return Chat.model_validate(data)
