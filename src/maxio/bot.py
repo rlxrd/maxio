@@ -20,6 +20,7 @@ from maxio.methods import (
     GetBotChatMembership,
     GetChat,
     GetChatAdmins,
+    GetChatByLink,
     GetChatMembers,
     GetChats,
     GetMe,
@@ -350,9 +351,19 @@ class Bot:
         """Remove the bot from a chat."""
         return await self(LeaveChat(chat_id=chat_id))
 
-    async def get_chat_admins(self, chat_id: int) -> list[ChatMember]:
+    async def get_chat_admins(
+        self,
+        chat_id: int,
+        *,
+        count: int = 50,
+        marker: int | None = None,
+    ) -> list[ChatMember]:
         """List administrators of a chat."""
-        return await self(GetChatAdmins(chat_id=chat_id))
+        return await self(GetChatAdmins(chat_id=chat_id, count=count, marker=marker))
+
+    async def get_chat_by_link(self, chat_link: str) -> Chat:
+        """Get chat or channel info by its public link (e.g. ``@channelname``)."""
+        return await self(GetChatByLink(chat_link=chat_link))
 
     async def add_chat_admin(
         self,
@@ -378,9 +389,10 @@ class Bot:
         *,
         update_types: list[str] | None = None,
         version: str | None = None,
+        secret: str | None = None,
     ) -> bool:
         """Subscribe to bot events via webhook. Returns ``True`` on success."""
-        return await self(Subscribe(url=url, update_types=update_types, version=version))
+        return await self(Subscribe(url=url, update_types=update_types, version=version, secret=secret))
 
     async def unsubscribe(self, url: str) -> bool:
         """Remove a webhook subscription by URL."""
