@@ -89,6 +89,7 @@ result = await bot.get_chats(count=50)
 # result.marker → int | None  (для пагинации)
 chats = result.chats
 chat  = await bot.get_chat(chat_id)
+chat  = await bot.get_chat_by_link("@channelname")
 chat  = await bot.update_chat(chat_id, title="Новое название", notify=True)
 await bot.delete_chat(chat_id)
 await bot.send_chat_action(chat_id, ChatAction.TYPING_ON)
@@ -119,8 +120,8 @@ await bot.leave_chat(chat_id)
 ### Администраторы
 
 ```python
-admins = await bot.get_chat_admins(chat_id)        # → list[ChatMember]
-await bot.add_chat_admin(chat_id, user_id, permissions=["write", "delete_messages"])
+admins = await bot.get_chat_admins(chat_id, count=50)   # → list[ChatMember]
+await bot.add_chat_admin(chat_id, user_id, permissions=["write", "delete_messages"], alias="Модератор")
 await bot.remove_chat_admin(chat_id, user_id)
 ```
 
@@ -128,7 +129,7 @@ await bot.remove_chat_admin(chat_id, user_id)
 
 ```python
 subs    = await bot.get_subscriptions()              # → SubscriptionList
-success = await bot.subscribe(url, update_types=[...])  # → bool
+success = await bot.subscribe(url, update_types=[...], secret="mysecret")  # → bool
 await bot.unsubscribe(url)
 ```
 
