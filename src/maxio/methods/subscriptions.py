@@ -26,6 +26,7 @@ class Subscribe(MaxMethod[bool]):
     url: str
     update_types: list[str] | None = None
     version: str | None = None
+    secret: str | None = None
 
     def build_request(self) -> MaxRequest:
         body: dict[str, Any] = {"url": self.url}
@@ -33,6 +34,8 @@ class Subscribe(MaxMethod[bool]):
             body["update_types"] = self.update_types
         if self.version is not None:
             body["version"] = self.version
+        if self.secret is not None:
+            body["secret"] = self.secret
         return MaxRequest(http_method="POST", api_path="/subscriptions", json_body=body)
 
     def parse_response(self, data: Any) -> bool:
