@@ -56,11 +56,34 @@ Button.request_contact("📱 Поделиться номером")
 
 ```python
 Button.request_geo_location("📍 Моя геопозиция")
+Button.request_geo_location("📍 Быстро", quick=True)
+```
+
+### Button.message
+
+Кнопка, которая отправляет текстовое сообщение от пользователя:
+
+```python
+Button.message("Написать /help")
+```
+
+### Button.chat
+
+Кнопка для создания чата:
+
+```python
+Button.chat(
+    "Создать чат",
+    chat_title="Новый чат",
+    chat_description="Чат с ботом",
+    start_payload="from_button",
+)
 ```
 
 ## Пример: меню
 
 ```python
+from maxio import Callback, Command, F, Message
 from maxio.enums import Intent
 
 @app.message(Command("menu"))

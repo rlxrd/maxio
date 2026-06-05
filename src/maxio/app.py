@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Annotated, Any
+from typing import Any
 
-from maxio._docs import Doc
 from maxio._runtime import current_bot
 from maxio.bot import Bot
 from maxio.filters import Filter, FilterFunc, apply_filter
@@ -67,52 +66,13 @@ class MaxBot(Router):
 
     def __init__(
         self,
-        token: Annotated[
-            str,
-            Doc(
-                """
-                MAX Bot API access token.
-
-                Obtain it from the BotFather in the MAX messenger.
-                """
-            ),
-        ],
+        token: str,
         *,
-        storage: Annotated[
-            BaseStorage | None,
-            Doc(
-                """
-                FSM state storage backend.
-
-                Defaults to ``MemoryStorage`` when not provided.
-                """
-            ),
-        ] = None,
-        timeout: Annotated[
-            float,
-            Doc(
-                """
-                HTTP request timeout in seconds forwarded to ``Bot``.
-                """
-            ),
-        ] = 100.0,
-        mask_token_in_logs: Annotated[
-            bool,
-            Doc(
-                """
-                Replace the token with ``***`` in all log output.
-
-                Enabled by default to prevent accidental token leaks.
-                """
-            ),
-        ] = True,
+        storage: BaseStorage | None = None,
+        timeout: float = 100.0,
     ) -> None:
         super().__init__()
-        self.bot = Bot(
-            token,
-            timeout=timeout,
-            mask_token_in_logs=mask_token_in_logs,
-        )
+        self.bot = Bot(token, timeout=timeout)
         self._storage: BaseStorage = storage if storage is not None else MemoryStorage()
         self._routers: list[Router] = []
         self._running = False
@@ -265,9 +225,9 @@ class MaxBot(Router):
     async def start_polling(
         self,
         *,
-        timeout: Annotated[int, Doc("Long-poll server timeout in seconds.")] = 30,
-        limit: Annotated[int, Doc("Maximum updates per request.")] = 100,
-        types: Annotated[list[str] | None, Doc("Filter by update types.")] = None,
+        timeout: int = 30,
+        limit: int = 100,
+        types: list[str] | None = None,
     ) -> None:
         """Start the long-polling loop. Runs until :meth:`stop` is called or interrupted."""
         self.me = await self.bot.get_me()

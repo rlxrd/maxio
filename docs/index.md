@@ -2,6 +2,11 @@
 
 **Асинхронный Python-фреймворк для [MAX Bot API](https://dev.max.ru/docs-api)** с внедрением зависимостей по аннотациям типов.
 
+!!! warning "Ранняя альфа"
+    maxio находится в ранней альфа-разработке. До стабилизации API возможны критические изменения.
+
+Текущий релиз: `0.5.0`.
+
 ```python
 @app.message(F.text == "привет")
 async def greet(message: Message, bot: Bot) -> None:
@@ -28,7 +33,7 @@ Python 3.10+. Зависимости: `httpx`, `pydantic v2`.
 
 ```python
 import os
-from maxio import Bot, Callback, F, InlineKeyboard, MaxBot, Message, Update
+from maxio import Bot, Callback, Command, F, InlineKeyboard, MaxBot, Message, Update
 from maxio.keyboards import Button
 
 app = MaxBot(os.environ["MAX_TOKEN"])
@@ -67,17 +72,16 @@ MAX_TOKEN=<ваш_токен> python bot.py
 
 ## Возможности
 
-- **Все 28 эндпоинтов** MAX Bot API — полное покрытие
+- **Основные эндпоинты** MAX Bot API — сообщения, callbacks, чаты, участники, админы, вебхуки и медиа
 - **Все 11 типов событий** — именованный декоратор для каждого
 - **F (MagicFilter)** — `F.text == "да"`, `F.photo`, `F.data.in_(...)`
 - **DI по аннотациям** — `message: Message`, `bot: Bot`, `fsm: FSMContext`
 - **Optional в DI** — `Message | None` вместо ошибки, если тип недоступен
-- **MaxMethod** — каждый API-метод — отдельная Pydantic-модель
 - **Middleware** (outer / inner) с полным DI
 - **Роутеры** — разбивка хэндлеров по модулям
 - **FSM** — диалоги с состоянием, `MemoryStorage` из коробки
 - **Управление чатами** — участники, админы, закрепление, действия
 - **Вебхуки** — подписка / отписка через API
 - **Медиа** — загрузка и приём фото / видео / аудио / файлов
-- **Клавиатуры** — 6 типов кнопок
+- **Клавиатуры** — callback, link, message, chat, request_contact, request_geo_location
 - Pydantic v2, `py.typed`, `mypy --strict` ✅

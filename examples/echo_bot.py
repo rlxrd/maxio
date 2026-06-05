@@ -6,21 +6,21 @@ echo_bot.py — минимальный рабочий бот на maxio.
 """
 
 import logging
+import os
 
 from maxio import Bot, Callback, Command, F, InlineKeyboard, MaxBot, Message, Update
-from maxio.fsm.context import FSMContext
 from maxio.keyboards import Button
 
 logging.basicConfig(level=logging.INFO)
 
-app = MaxBot(
-    token=""
-)
+app = MaxBot(os.environ["MAX_TOKEN"])
 
 
 # Кнопка «Начать» шлёт отдельное событие bot_started, а не сообщение /start.
 @app.bot_started()
 async def on_start(update: Update, bot: Bot) -> None:
+    if update.chat_id is None:
+        return
     keyboard = InlineKeyboard().row(Button.callback("Пинг", "ping"))
     await bot.send_message(
         f"Привет, {update.user.full_name if update.user else 'друг'}!",
@@ -43,9 +43,8 @@ async def on_ping(callback: Callback) -> None:
 
 # Ловит всё остальное и повторяет
 @app.message()
-async def handler(message: Message, bot: Bot, fsm: FSMContext) -> None:
-    me = await bot.get_me()
-    await message.answer(f"Привет от @{me.full_name}")
+async def echo(message: Message) -> None:
+    await message.reply(message.text or "(пустое сообщение)")
 
 
 if __name__ == "__main__":

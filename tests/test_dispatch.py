@@ -61,7 +61,7 @@ async def test_command_filter_routing() -> None:
 
 @respx.mock
 async def test_message_answer_targets_recipient() -> None:
-    route = respx.post("https://botapi.max.ru/messages").mock(
+    route = respx.post("https://platform-api.max.ru/messages").mock(
         return_value=httpx.Response(200, json={"message": message_created()["message"]})
     )
     app = MaxBot("TOKEN")
@@ -78,7 +78,7 @@ async def test_message_answer_targets_recipient() -> None:
 
 @respx.mock
 async def test_callback_dispatch_and_answer() -> None:
-    route = respx.post("https://botapi.max.ru/answers").mock(
+    route = respx.post("https://platform-api.max.ru/answers").mock(
         return_value=httpx.Response(200, json={"success": True})
     )
     app = MaxBot("TOKEN")
@@ -174,7 +174,7 @@ async def test_router_registers_before_include() -> None:
 
 @respx.mock
 async def test_callback_message_answer() -> None:
-    route = respx.post("https://botapi.max.ru/messages").mock(
+    route = respx.post("https://platform-api.max.ru/messages").mock(
         return_value=httpx.Response(200, json={"message": message_created()["message"]})
     )
     app = MaxBot("TOKEN")

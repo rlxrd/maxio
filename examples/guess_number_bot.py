@@ -11,6 +11,7 @@ guess_number_bot.py — игра «Угадай число».
 from __future__ import annotations
 
 import logging
+import os
 import random
 
 from maxio import (
@@ -32,7 +33,7 @@ from maxio.keyboards import Button
 
 logging.basicConfig(level=logging.INFO)
 
-app = MaxBot("")
+app = MaxBot(os.environ["MAX_TOKEN"])
 
 MAX_ATTEMPTS = 7
 

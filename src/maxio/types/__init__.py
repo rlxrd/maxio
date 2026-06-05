@@ -9,6 +9,7 @@ from maxio.types.attachment import (
 )
 from maxio.types.callback import Callback
 from maxio.types.chat import Chat, ChatList, Image
+from maxio.types.member import ChatMember, ChatMemberList
 from maxio.types.message import (
     LinkedMessage,
     Message,
@@ -18,8 +19,10 @@ from maxio.types.message import (
     Recipient,
     SendMessageResult,
 )
+from maxio.types.subscription import Subscription, SubscriptionList
 from maxio.types.update import Update, UpdateList
 from maxio.types.user import BotInfo, User
+from maxio.types.video import VideoInfo
 
 __all__ = [
     "Attachment",
@@ -31,6 +34,8 @@ __all__ = [
     "Callback",
     "Chat",
     "ChatList",
+    "ChatMember",
+    "ChatMemberList",
     "Image",
     "LinkedMessage",
     "Message",
@@ -39,7 +44,10 @@ __all__ = [
     "NewMessageLink",
     "Recipient",
     "SendMessageResult",
+    "Subscription",
+    "SubscriptionList",
     "Update",
     "UpdateList",
     "User",
+    "VideoInfo",
 ]

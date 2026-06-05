@@ -13,9 +13,22 @@ from maxio._logging import TokenMaskingFilter
 from maxio.keyboards import Button
 
 
+def test_new_public_types_are_exported() -> None:
+    import maxio
+
+    assert maxio.ChatAction.TYPING_ON == "typing_on"
+    assert maxio.ChatMemberRole.ADMIN == "admin"
+    assert maxio.ChatList
+    assert maxio.ChatMember
+    assert maxio.ChatMemberList
+    assert maxio.Subscription
+    assert maxio.SubscriptionList
+    assert maxio.VideoInfo
+
+
 @respx.mock
-async def test_send_message_query_vs_body() -> None:
-    route = respx.post("https://botapi.max.ru/messages").mock(
+async def test_send_message_query_body_and_auth() -> None:
+    route = respx.post("https://platform-api.max.ru/messages").mock(
         return_value=httpx.Response(200, json={"message": message_payload("ответ")})
     )
     bot = Bot("TOKEN")
@@ -23,7 +36,7 @@ async def test_send_message_query_vs_body() -> None:
 
     request = route.calls.last.request
     assert request.url.params["chat_id"] == "10"
-    assert request.url.params["access_token"] == "TOKEN"
+    assert "access_token" not in request.url.params
     assert request.headers["Authorization"] == "TOKEN"
 
     body = json.loads(request.content)
@@ -37,7 +50,7 @@ async def test_send_message_query_vs_body() -> None:
 
 @respx.mock
 async def test_send_message_with_keyboard() -> None:
-    route = respx.post("https://botapi.max.ru/messages").mock(
+    route = respx.post("https://platform-api.max.ru/messages").mock(
         return_value=httpx.Response(200, json={"message": message_payload()})
     )
     bot = Bot("TOKEN")
@@ -58,7 +71,7 @@ def test_token_masking_filter_hides_token_in_url() -> None:
     flt = TokenMaskingFilter()
     record = _make_record(
         'HTTP Request: GET %s "%s"',
-        "https://botapi.max.ru/updates?access_token=SECRET&limit=100",
+        "https://platform-api.max.ru/updates?access_token=SECRET&limit=100",
         "HTTP/1.1 200 OK",
     )
     flt.filter(record)
@@ -85,7 +98,7 @@ async def test_send_message_requires_target() -> None:
 
 @respx.mock
 async def test_api_error_raised() -> None:
-    respx.get("https://botapi.max.ru/me").mock(
+    respx.get("https://platform-api.max.ru/me").mock(
         return_value=httpx.Response(401, json={"code": "verify.token", "message": "bad token"})
     )
     bot = Bot("TOKEN")
@@ -93,4 +106,29 @@ async def test_api_error_raised() -> None:
         await bot.get_me()
     assert exc.value.status_code == 401
     assert exc.value.code == "verify.token"
+    await bot.aclose()
+
+
+@respx.mock
+async def test_get_pinned_message_unwraps_message() -> None:
+    respx.get("https://platform-api.max.ru/chats/10/pin").mock(
+        return_value=httpx.Response(200, json={"message": message_payload("закреп")})
+    )
+    bot = Bot("TOKEN")
+
+    msg = await bot.get_pinned_message(10)
+
+    assert msg is not None
+    assert msg.text == "закреп"
+    await bot.aclose()
+
+
+@respx.mock
+async def test_get_pinned_message_returns_none() -> None:
+    respx.get("https://platform-api.max.ru/chats/10/pin").mock(
+        return_value=httpx.Response(200, json={"message": None})
+    )
+    bot = Bot("TOKEN")
+
+    assert await bot.get_pinned_message(10) is None
     await bot.aclose()

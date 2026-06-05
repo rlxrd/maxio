@@ -5,7 +5,7 @@
 Загрузка — двухшаговый процесс: сначала загрузить файл, получить токен, затем отправить с токеном.
 
 ```python
-from maxio import media
+from maxio import Bot, Command, Message, media
 from maxio.enums import UploadType
 from pathlib import Path
 
@@ -34,8 +34,11 @@ token = await bot.upload(Path("photo.jpg"), UploadType.IMAGE)
 
 # Из байт
 data = open("photo.jpg", "rb").read()
-token = await bot.upload(data, UploadType.IMAGE)
+token = await bot.upload(data, UploadType.IMAGE, filename="photo.jpg")
 ```
+
+`bot.upload()` сам делает двухшаговую загрузку: получает upload URL у MAX API,
+загружает файл на этот URL и возвращает token для `media.image/video/audio/file`.
 
 ---
 
@@ -82,7 +85,7 @@ async def got_any(message: Message) -> None:
 ```python
 message.photos    # list[PhotoAttachmentPayload]
 message.videos    # list[VideoAttachmentPayload]
-message.audios    # list[AudioAttachmentPayload]
+message.audio     # list[AudioAttachmentPayload]
 message.files     # list[FileAttachmentPayload]
 message.attachments  # list[Attachment] — все вложения
 ```

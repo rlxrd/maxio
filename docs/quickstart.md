@@ -109,12 +109,14 @@ async def cmd_menu(message: Message) -> None:
 
 @app.callback(F.data == "yes")
 async def on_yes(callback: Callback) -> None:
+    await callback.answer()
     if callback.message:
         await callback.message.answer("Ты нажал «Да»!")
 
 
 @app.callback(F.data == "no")
 async def on_no(callback: Callback) -> None:
+    await callback.answer()
     if callback.message:
         await callback.message.answer("Ты нажал «Нет»!")
 

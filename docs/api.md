@@ -3,13 +3,12 @@
 ## MaxBot
 
 ```python
-from maxio import MaxBot
+from maxio import MaxBot, MemoryStorage
 
 app = MaxBot(
     token="...",
     storage=MemoryStorage(),   # FSM-хранилище (по умолч. MemoryStorage)
     timeout=60.0,              # таймаут HTTP-запросов в секундах (по умолч. 100.0)
-    mask_token_in_logs=True,   # скрыть токен в логах httpx (по умолч. True)
 )
 ```
 
@@ -35,10 +34,13 @@ app.inner_middleware(fn)
 
 ## Bot
 
-`Bot` — исполнитель HTTP-запросов. Каждый метод создаёт соответствующий [`MaxMethod`](methods.md) и вызывает `Bot.__call__`.
+`Bot` — низкоуровневый HTTP-клиент с простыми async-методами для MAX Bot API.
+HTTP-клиент инкапсулирован внутри `Bot`, а токен в HTTP-логах маскируется автоматически.
 
 ```python
 from maxio import Bot
+
+bot = Bot(token="...", timeout=60.0)
 ```
 
 ### Информация о боте
@@ -62,7 +64,13 @@ await bot.send_message(
     disable_link_preview=False,
 )
 
-await bot.edit_message(message_id, text="новый текст", keyboard=kb)
+await bot.edit_message(
+    message_id,
+    text="новый текст",
+    keyboard=kb,
+    attachments=[...],
+    format=TextFormat.MARKDOWN,
+)
 
 await bot.delete_message(message_id)
 
@@ -77,7 +85,9 @@ await bot.answer_callback(
     callback_id,
     notification="Готово!",   # всплывающее уведомление
     text="...",               # сообщение вместе с ответом
+    attachments=[...],
     keyboard=kb,
+    format=TextFormat.MARKDOWN,
 )
 ```
 
@@ -121,7 +131,7 @@ await bot.leave_chat(chat_id)
 
 ```python
 admins = await bot.get_chat_admins(chat_id, count=50)   # → list[ChatMember]
-await bot.add_chat_admin(chat_id, user_id, permissions=["write", "delete_messages"], alias="Модератор")
+await bot.add_chat_admin(chat_id, user_id, permissions=["write", "delete_messages"])
 await bot.remove_chat_admin(chat_id, user_id)
 ```
 
@@ -129,7 +139,12 @@ await bot.remove_chat_admin(chat_id, user_id)
 
 ```python
 subs    = await bot.get_subscriptions()              # → SubscriptionList
-success = await bot.subscribe(url, update_types=[...], secret="mysecret")  # → bool
+success = await bot.subscribe(
+    url,
+    update_types=["message_created"],
+    version="1",
+    secret="mysecret",
+)  # → bool
 await bot.unsubscribe(url)
 ```
 
@@ -138,6 +153,7 @@ await bot.unsubscribe(url)
 ```python
 token = await bot.upload(file, UploadType.IMAGE)
 # file: Path | bytes | IO[bytes]
+token = await bot.upload(data, UploadType.IMAGE, filename="photo.jpg")
 
 info = await bot.get_video_info(video_token)       # → VideoInfo
 ```
@@ -182,7 +198,7 @@ await callback.answer()   # без уведомления
 ### ChatMember
 
 ```python
-from maxio.types.member import ChatMember, ChatMemberList
+from maxio import ChatMember, ChatMemberList
 
 member.user_id
 member.first_name
@@ -194,7 +210,7 @@ member.permissions   # list[str] | None
 ### Subscription
 
 ```python
-from maxio.types.subscription import Subscription, SubscriptionList
+from maxio import Subscription, SubscriptionList
 
 sub.url
 sub.update_types     # list[str] | None
@@ -204,10 +220,11 @@ sub.version          # str | None
 ### VideoInfo
 
 ```python
-from maxio.types.video import VideoInfo
+from maxio import VideoInfo
 
 info.token
 info.urls        # dict[str, str] | None  — ключи: mp4_1080, mp4_720 и т.д.
+info.thumbnail
 info.width
 info.height
 info.duration        # секунды

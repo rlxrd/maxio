@@ -5,6 +5,8 @@ from maxio.app import MaxBot
 from maxio.bot import Bot
 from maxio.enums import (
     ButtonType,
+    ChatAction,
+    ChatMemberRole,
     ChatStatus,
     ChatType,
     Intent,
@@ -39,13 +41,19 @@ from maxio.types import (
     BotInfo,
     Callback,
     Chat,
+    ChatList,
+    ChatMember,
+    ChatMemberList,
     Message,
+    Subscription,
+    SubscriptionList,
     Update,
     UpdateList,
     User,
+    VideoInfo,
 )
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "MaxBot",
@@ -67,7 +75,6 @@ __all__ = [
     "InlineKeyboard",
     "Command",
     "CallbackPayload",
-    "Command",
     "Filter",
     "HasMedia",
     "F",
@@ -79,11 +86,19 @@ __all__ = [
     "BotInfo",
     "Callback",
     "Chat",
+    "ChatList",
+    "ChatMember",
+    "ChatMemberList",
     "Message",
+    "Subscription",
+    "SubscriptionList",
     "Update",
     "UpdateList",
     "User",
+    "VideoInfo",
     "ButtonType",
+    "ChatAction",
+    "ChatMemberRole",
     "ChatStatus",
     "ChatType",
     "Intent",

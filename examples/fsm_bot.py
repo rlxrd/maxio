@@ -11,6 +11,7 @@ fsm_bot.py — пример многошагового диалога через
 from __future__ import annotations
 
 import logging
+import os
 
 from maxio import (
     Bot,
@@ -30,14 +31,14 @@ from maxio.keyboards import Button
 
 logging.basicConfig(level=logging.INFO)
 
-app = MaxBot("")
+app = MaxBot(os.environ["MAX_TOKEN"])
 
 
 # --- Состояния ---
 
 class Form(StatesGroup):
     waiting_name = State()
-    waiting_age  = State()
+    waiting_age = State()
     waiting_city = State()
 
 

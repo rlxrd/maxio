@@ -198,11 +198,11 @@ async def test_has_media_no_attachments() -> None:
 @respx.mock
 async def test_upload_image() -> None:
     # Шаг 1: POST /uploads → upload endpoint
-    respx.post("https://botapi.max.ru/uploads").mock(
+    endpoint_route = respx.post("https://platform-api.max.ru/uploads").mock(
         return_value=httpx.Response(200, json={"url": "https://upload.max.ru/img"})
     )
     # Шаг 2: POST на upload URL → token
-    respx.post("https://upload.max.ru/img").mock(
+    upload_route = respx.post("https://upload.max.ru/img").mock(
         return_value=httpx.Response(200, json={"token": "image_token_123"})
     )
 
@@ -212,19 +212,27 @@ async def test_upload_image() -> None:
     bot = Bot("TOKEN")
     token = await bot.upload(b"fake_image_data", UploadType.IMAGE, filename="photo.jpg")
     assert token == "image_token_123"
+
+    endpoint_request = endpoint_route.calls.last.request
+    assert endpoint_request.url.params["type"] == "image"
+    assert "access_token" not in endpoint_request.url.params
+    assert endpoint_request.headers["Authorization"] == "TOKEN"
+
+    upload_request = upload_route.calls.last.request
+    assert upload_request.headers["Authorization"] == "TOKEN"
     await bot.aclose()
 
 
 @respx.mock
 async def test_upload_video_token_from_endpoint() -> None:
     """Для video токен приходит сразу из /uploads (без второго ответа)."""
-    respx.post("https://botapi.max.ru/uploads").mock(
+    endpoint_route = respx.post("https://platform-api.max.ru/uploads").mock(
         return_value=httpx.Response(200, json={
             "url": "https://upload.max.ru/vid",
             "token": "video_token_456",
         })
     )
-    respx.post("https://upload.max.ru/vid").mock(
+    upload_route = respx.post("https://upload.max.ru/vid").mock(
         return_value=httpx.Response(200, json={})
     )
 
@@ -234,4 +242,12 @@ async def test_upload_video_token_from_endpoint() -> None:
     bot = Bot("TOKEN")
     token = await bot.upload(b"fake_video_data", UploadType.VIDEO, filename="video.mp4")
     assert token == "video_token_456"
+
+    endpoint_request = endpoint_route.calls.last.request
+    assert endpoint_request.url.params["type"] == "video"
+    assert "access_token" not in endpoint_request.url.params
+    assert endpoint_request.headers["Authorization"] == "TOKEN"
+
+    upload_request = upload_route.calls.last.request
+    assert upload_request.headers["Authorization"] == "TOKEN"
     await bot.aclose()

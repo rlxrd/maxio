@@ -2,6 +2,61 @@
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-06-05
+
+### Добавлено
+
+- **Расширено покрытие MAX Bot API**:
+  - чаты: `get_chat`, `get_chat_by_link`, `update_chat`, `delete_chat`, `send_chat_action`
+  - закрепы: `get_pinned_message`, `pin_message`, `unpin_message`
+  - участники: `get_chat_members`, `add_chat_members`, `remove_chat_member`
+  - администраторы: `get_chat_admins`, `add_chat_admin`, `remove_chat_admin`
+  - членство бота: `get_bot_chat_membership`, `leave_chat`
+  - webhooks: `get_subscriptions`, `subscribe`, `unsubscribe`
+  - медиа: `get_video_info`
+- **Новые публичные типы и enum'ы** экспортируются из `maxio`:
+  `ChatAction`, `ChatMemberRole`, `ChatList`, `ChatMember`, `ChatMemberList`,
+  `Subscription`, `SubscriptionList`, `VideoInfo`.
+- **Новые примеры**:
+  - `examples/chat_tools_bot.py` — управление чатами, участниками, админами и закрепами
+  - `examples/media_upload_bot.py` — загрузка файлов и обработка входящих медиа
+  - `examples/webhooks_bot.py` — управление webhook subscriptions
+
+### Изменено
+
+- **Авторизация переведена на header-only**: токен больше не передаётся в query string,
+  все запросы используют `Authorization`.
+- **Официальный API host обновлён** с `https://botapi.max.ru` на
+  `https://platform-api.max.ru`.
+- **`Bot` стал проще**: HTTP-запросы снова собираются напрямую внутри `Bot`, без
+  отдельного method-object слоя.
+- **`Bot.get_chats()` теперь возвращает `ChatList`**, чтобы сохранить `marker`
+  для пагинации.
+- **Маскирование токена в логах всегда включено**. Публичный переключатель больше
+  не нужен: фильтр дешёвый и защищает `Authorization`/чувствительные URL в debug-логах.
+- **HTTP client инкапсулирован**: пользовательский API больше не принимает внешний
+  `httpx.AsyncClient`.
+- Примеры обновлены под текущий API и используют `MAX_TOKEN` из окружения.
+
+### Исправлено
+
+- `get_pinned_message()` теперь корректно разбирает официальный ответ
+  `{"message": Message | null}` и возвращает `None`, если закрепа нет.
+- Callback/FSM context теперь корректнее выбирает пользователя для callback update.
+- Upload-flow проверен по официальной документации: сохраняется двухшаговая схема
+  `POST /uploads?type=...` → multipart upload на выданный URL.
+- Убрана неактуальная документация по `add_chat_admin(..., alias=...)`.
+
+### Удалено
+
+- Удалён пакет `maxio.methods` и публичный `MaxMethod`/`MaxRequest` API.
+  Фреймворк оставляет один основной стиль: `await bot.send_message(...)`,
+  `await bot.get_chat(...)` и т.д.
+- Удалён служебный `_docs.Doc`/`typing.Annotated` слой для параметров: он не
+  использовался runtime'ом или генерацией документации и усложнял сигнатуры.
+- Удалены публичные параметры `client` и `mask_token_in_logs` из `Bot`.
+- Удалён параметр `mask_token_in_logs` из `MaxBot`.
+
 ## [0.4.0] — 2026-05-29
 
 ### Добавлено
@@ -102,8 +157,9 @@
 - Сахар на моделях: `Message.answer()`, `Message.reply()`, `CallbackQuery.answer()`
 - Pydantic v2, `py.typed`, совместимость с `mypy --strict`
 
-[Unreleased]: https://github.com/rlxrd/maxio/compare/v0.4.0...HEAD
-[0.4.0]: https://github.com/rlxrd/maxio/compare/v0.3.0...v0.4.0
+[Unreleased]: https://github.com/rlxrd/maxio/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/rlxrd/maxio/compare/v0.4...v0.5.0
+[0.4.0]: https://github.com/rlxrd/maxio/compare/v0.3.0...v0.4
 [0.3.0]: https://github.com/rlxrd/maxio/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/rlxrd/maxio/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/rlxrd/maxio/releases/tag/v0.1.0

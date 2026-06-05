@@ -5,6 +5,7 @@ maxio покрывает все эндпоинты для работы с чат
 ## Информация о чате
 
 ```python
+import os
 from maxio import Bot, Command, MaxBot, Message
 from maxio.enums import ChatAction
 
@@ -26,9 +27,20 @@ async def cmd_chatinfo(message: Message, bot: Bot) -> None:
 ```python
 @app.message(Command("chats"))
 async def cmd_chats(message: Message, bot: Bot) -> None:
-    chats = await bot.get_chats(count=50)
-    lines = [f"• {c.title} ({c.chat_id})" for c in chats]
+    result = await bot.get_chats(count=50)
+    lines = [f"• {c.title} ({c.chat_id})" for c in result.chats]
     await message.answer("\n".join(lines) or "Чатов нет")
+```
+
+Пагинация через `result.marker`:
+
+```python
+result = await bot.get_chats(count=50)
+all_chats = list(result.chats)
+
+while result.marker:
+    result = await bot.get_chats(count=50, marker=result.marker)
+    all_chats.extend(result.chats)
 ```
 
 ## Изменить название чата
@@ -152,7 +164,7 @@ async def cmd_admins(message: Message, bot: Bot) -> None:
 
 ```python
 import os
-from maxio import Bot, MaxBot, Update
+from maxio import Bot, Command, MaxBot, Message, Update
 
 app = MaxBot(os.environ["MAX_TOKEN"])
 

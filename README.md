@@ -15,6 +15,12 @@
 
 ---
 
+> [!WARNING]
+> maxio находится в ранней альфа-разработке. До стабилизации API возможны
+> критические изменения.
+>
+> Текущий релиз: `0.5.0`.
+
 Объявляйте в сигнатуре хэндлера только то, что нужно — фреймворк подставит из контекста сам:
 
 ```python
@@ -399,13 +405,14 @@ app = MaxBot(
     token="...",
     storage=MyStorage(),      # FSM-хранилище (по умолч. MemoryStorage)
     timeout=60.0,             # таймаут HTTP-запросов в секундах (по умолч. 100.0)
-    mask_token_in_logs=True,  # скрыть токен в логах httpx (по умолч. True)
 )
 
 app.run()                     # запуск polling, блокирующий
 # или
 await app.start_polling()     # async-вариант
 ```
+
+Токен в HTTP-логах маскируется автоматически.
 
 
 ## Методы Bot
@@ -419,6 +426,27 @@ await bot.get_message(message_id)
 await bot.get_messages(chat_id)
 await bot.answer_callback(callback_id, notification=..., payload=...)
 await bot.get_chats()
+await bot.get_chat(chat_id)
+await bot.update_chat(chat_id, title=..., icon=...)
+await bot.delete_chat(chat_id)
+await bot.send_chat_action(chat_id, action)
+await bot.get_pinned_message(chat_id)
+await bot.pin_message(chat_id, message_id, notify=...)
+await bot.unpin_message(chat_id)
+await bot.get_chat_members(chat_id)
+await bot.add_chat_members(chat_id, user_ids)
+await bot.remove_chat_member(chat_id, user_id)
+await bot.get_bot_chat_membership(chat_id)
+await bot.leave_chat(chat_id)
+await bot.get_chat_admins(chat_id)
+await bot.get_chat_by_link(chat_link)
+await bot.add_chat_admin(chat_id, user_id, role=..., alias=...)
+await bot.remove_chat_admin(chat_id, user_id)
+await bot.get_subscriptions()
+await bot.subscribe(url, update_types=..., version=...)
+await bot.unsubscribe(url)
+await bot.get_video_info(video_token)
+await bot.get_updates(limit=..., timeout=..., marker=..., types=...)
 await bot.upload(file, UploadType.IMAGE)
 ```
 

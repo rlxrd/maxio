@@ -68,8 +68,8 @@ app.outer_middleware(ban_middleware)
 
 # --- Логирование только сообщений (не колбэков и т.п.) ---
 
-async def log_messages(update: Update, call_next: CallNextOuter) -> bool:
-    uid = update.user.user_id if update.user else "?"
+async def log_messages(update: Update, call_next: CallNextOuter, user: User | None) -> bool:
+    uid = user.user_id if user else "?"
     text = update.message.text if update.message else ""
     logger.info("[msg] user=%s text=%r", uid, text)
     return await call_next()

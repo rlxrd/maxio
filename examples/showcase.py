@@ -46,9 +46,8 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 app = MaxBot(
-    os.environ.get("MAX_TOKEN", "TOKEN"),
-    timeout=60.0,           # таймаут HTTP-запросов
-    mask_token_in_logs=True,  # скрыть токен в логах httpx (по умолч. True)
+    os.environ["MAX_TOKEN"],
+    timeout=60.0,  # таймаут HTTP-запросов
 )
 
 admin_router = Router()
@@ -86,8 +85,8 @@ app.outer_middleware(TimingMiddleware())
 
 # --- Outer middleware: функция, только для message_created ---
 
-async def log_messages(update: Update, call_next: CallNextOuter) -> bool:
-    logger.info("[msg] от user_id=%s", update.user.user_id if update.user else "?")
+async def log_messages(update: Update, call_next: CallNextOuter, user: User | None) -> bool:
+    logger.info("[msg] от user_id=%s", user.user_id if user else "?")
     return await call_next()
 
 

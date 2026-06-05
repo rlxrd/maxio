@@ -1,64 +1,60 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import IO, Annotated, Any, TypeVar
+from typing import IO, Any
 
 import httpx
 
-from maxio._docs import Doc
 from maxio._logging import install_token_masking
 from maxio.enums import ChatAction, TextFormat, UploadType
 from maxio.exceptions import MaxApiError, MaxError
 from maxio.keyboards import InlineKeyboard
-from maxio.methods import (
-    AddChatAdmin,
-    AddChatMembers,
-    AnswerCallback,
-    DeleteChat,
-    DeleteMessage,
-    EditMessage,
-    GetBotChatMembership,
-    GetChat,
-    GetChatAdmins,
-    GetChatByLink,
-    GetChatMembers,
-    GetChats,
-    GetMe,
-    GetMessage,
-    GetMessages,
-    GetPinnedMessage,
-    GetSubscriptions,
-    GetUpdates,
-    GetVideoInfo,
-    LeaveChat,
-    MaxMethod,
-    PinMessage,
-    RemoveChatAdmin,
-    RemoveChatMember,
-    SendChatAction,
-    SendMessage,
-    Subscribe,
-    UnpinMessage,
-    Unsubscribe,
-    UpdateChat,
-)
 from maxio.types.chat import Chat, ChatList
 from maxio.types.member import ChatMember, ChatMemberList
-from maxio.types.message import Message, NewMessageLink
+from maxio.types.message import Message, MessageList, NewMessageLink, SendMessageResult
 from maxio.types.subscription import SubscriptionList
 from maxio.types.update import UpdateList
 from maxio.types.user import BotInfo
 from maxio.types.video import VideoInfo
 
-T = TypeVar("T")
+
+def _normalize_attachments(
+    attachments: list[Any] | None,
+    keyboard: InlineKeyboard | None,
+) -> list[dict[str, Any]] | None:
+    result: list[dict[str, Any]] = []
+    for item in attachments or []:
+        result.append(item.as_attachment() if hasattr(item, "as_attachment") else item)
+    if keyboard is not None:
+        result.append(keyboard.as_attachment())
+    return result or None
+
+
+def _message_body(
+    text: str | None,
+    attachments: list[dict[str, Any]] | None,
+    link: NewMessageLink | None,
+    notify: bool,
+    format: TextFormat | str | None,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {"notify": notify}
+    if text is not None:
+        body["text"] = text
+    if attachments is not None:
+        body["attachments"] = attachments
+    if link is not None:
+        body["link"] = link.model_dump()
+    if format is not None:
+        body["format"] = str(format)
+    return body
+
+
+def _success(data: Any) -> bool:
+    return bool(data.get("success", True)) if isinstance(data, dict) else True
 
 
 class Bot:
     """Async MAX Bot API client built on top of httpx.
-
-    Acts as the executor for :class:`~maxio.methods.base.MaxMethod` instances.
-    Each high-level method (``send_message``, ``edit_message``, …) constructs
-    the corresponding method object and delegates to :meth:`__call__`.
 
     Example:
         ```python
@@ -70,72 +66,21 @@ class Bot:
         ```
     """
 
-    BASE_URL = "https://botapi.max.ru"
+    BASE_URL = "https://platform-api.max.ru"
 
     def __init__(
         self,
-        token: Annotated[
-            str,
-            Doc(
-                """
-                MAX Bot API access token.
-
-                Obtain it from the BotFather in the MAX messenger.
-                """
-            ),
-        ],
+        token: str,
         *,
-        timeout: Annotated[
-            float,
-            Doc(
-                """
-                Default HTTP request timeout in seconds.
-
-                Applied to all API calls. Set this slightly above the long-poll
-                ``timeout`` passed to ``get_updates``.
-                """
-            ),
-        ] = 100.0,
-        client: Annotated[
-            httpx.AsyncClient | None,
-            Doc(
-                """
-                Custom httpx client instead of the default one.
-
-                Useful for injecting a pre-configured or mocked client in tests.
-                """
-            ),
-        ] = None,
-        mask_token_in_logs: Annotated[
-            bool,
-            Doc(
-                """
-                Replace the token with ``***`` in all log output.
-
-                Enabled by default to prevent accidental token leaks.
-                """
-            ),
-        ] = True,
+        timeout: float = 100.0,
     ) -> None:
         self.token = token
-        if mask_token_in_logs:
-            install_token_masking()
-        self._client = client or httpx.AsyncClient(
+        install_token_masking()
+        self._client = httpx.AsyncClient(
             base_url=self.BASE_URL,
             timeout=timeout,
             headers={"Authorization": token},
         )
-
-    async def __call__(self, method: MaxMethod[T]) -> T:
-        """Execute a :class:`~maxio.methods.base.MaxMethod` and return the parsed result."""
-        req = method.build_request()
-        data = await self._request(
-            req.http_method,
-            req.api_path,
-            params=req.params,
-            json=req.json_body,
-        )
-        return method.parse_response(data)
 
     async def _request(
         self,
@@ -145,9 +90,7 @@ class Bot:
         params: dict[str, Any] | None = None,
         json: Any | None = None,
     ) -> Any:
-        query = {"access_token": self.token}
-        if params:
-            query.update({k: v for k, v in params.items() if v is not None})
+        query = {k: v for k, v in (params or {}).items() if v is not None}
         response = await self._client.request(method, path, params=query, json=json)
         try:
             data = response.json()
@@ -163,7 +106,8 @@ class Bot:
 
     async def get_me(self) -> BotInfo:
         """Return information about the bot itself."""
-        return await self(GetMe())
+        data = await self._request("GET", "/me")
+        return BotInfo.model_validate(data)
 
     async def send_message(
         self,
@@ -182,17 +126,25 @@ class Bot:
 
         Exactly one of ``chat_id`` or ``user_id`` must be provided.
         """
-        return await self(SendMessage(
-            text=text,
-            chat_id=chat_id,
-            user_id=user_id,
-            attachments=attachments,
-            keyboard=keyboard,
-            link=link,
-            notify=notify,
-            format=format,
-            disable_link_preview=disable_link_preview,
-        ))
+        if chat_id is None and user_id is None:
+            raise ValueError("chat_id or user_id is required")
+        data = await self._request(
+            "POST",
+            "/messages",
+            params={
+                "chat_id": chat_id,
+                "user_id": user_id,
+                "disable_link_preview": disable_link_preview,
+            },
+            json=_message_body(
+                text,
+                _normalize_attachments(attachments, keyboard),
+                link,
+                notify,
+                format,
+            ),
+        )
+        return SendMessageResult.model_validate(data).message
 
     async def edit_message(
         self,
@@ -206,23 +158,29 @@ class Bot:
         format: TextFormat | str | None = None,
     ) -> bool:
         """Edit an existing message. Returns ``True`` on success."""
-        return await self(EditMessage(
-            message_id=message_id,
-            text=text,
-            attachments=attachments,
-            keyboard=keyboard,
-            link=link,
-            notify=notify,
-            format=format,
-        ))
+        data = await self._request(
+            "PUT",
+            "/messages",
+            params={"message_id": message_id},
+            json=_message_body(
+                text,
+                _normalize_attachments(attachments, keyboard),
+                link,
+                notify,
+                format,
+            ),
+        )
+        return _success(data)
 
     async def delete_message(self, message_id: str) -> bool:
         """Delete a message by its ID. Returns ``True`` on success."""
-        return await self(DeleteMessage(message_id=message_id))
+        data = await self._request("DELETE", "/messages", params={"message_id": message_id})
+        return _success(data)
 
     async def get_message(self, message_id: str) -> Message:
         """Fetch a single message by its ID."""
-        return await self(GetMessage(message_id=message_id))
+        data = await self._request("GET", f"/messages/{message_id}")
+        return Message.model_validate(data)
 
     async def get_messages(
         self,
@@ -234,13 +192,18 @@ class Bot:
         count: int = 50,
     ) -> list[Message]:
         """Fetch a list of messages from a chat."""
-        return await self(GetMessages(
-            chat_id=chat_id,
-            message_ids=message_ids,
-            from_time=from_time,
-            to_time=to_time,
-            count=count,
-        ))
+        data = await self._request(
+            "GET",
+            "/messages",
+            params={
+                "chat_id": chat_id,
+                "message_ids": ",".join(message_ids) if message_ids else None,
+                "from": from_time,
+                "to": to_time,
+                "count": count,
+            },
+        )
+        return MessageList.model_validate(data).messages
 
     async def answer_callback(
         self,
@@ -253,14 +216,16 @@ class Bot:
         format: TextFormat | str | None = None,
     ) -> bool:
         """Answer an inline button callback. Returns ``True`` on success."""
-        return await self(AnswerCallback(
-            callback_id=callback_id,
-            notification=notification,
-            text=text,
-            attachments=attachments,
-            keyboard=keyboard,
-            format=format,
-        ))
+        body: dict[str, Any] = {}
+        if notification is not None:
+            body["notification"] = notification
+        message_attachments = _normalize_attachments(attachments, keyboard)
+        if text is not None or message_attachments is not None:
+            body["message"] = _message_body(text, message_attachments, None, True, format)
+        data = await self._request(
+            "POST", "/answers", params={"callback_id": callback_id}, json=body
+        )
+        return _success(data)
 
     async def get_chats(
         self,
@@ -269,11 +234,13 @@ class Bot:
         marker: int | None = None,
     ) -> ChatList:
         """Return a paginated list of chats the bot participates in."""
-        return await self(GetChats(count=count, marker=marker))
+        data = await self._request("GET", "/chats", params={"count": count, "marker": marker})
+        return ChatList.model_validate(data if isinstance(data, dict) else {})
 
     async def get_chat(self, chat_id: int) -> Chat:
         """Get details of a specific chat."""
-        return await self(GetChat(chat_id=chat_id))
+        data = await self._request("GET", f"/chats/{chat_id}")
+        return Chat.model_validate(data)
 
     async def update_chat(
         self,
@@ -284,11 +251,20 @@ class Bot:
         notify: bool | None = None,
     ) -> Chat:
         """Update chat title, icon or notification settings."""
-        return await self(UpdateChat(chat_id=chat_id, title=title, icon=icon, notify=notify))
+        body: dict[str, Any] = {}
+        if title is not None:
+            body["title"] = title
+        if icon is not None:
+            body["icon"] = icon
+        if notify is not None:
+            body["notify"] = notify
+        data = await self._request("PATCH", f"/chats/{chat_id}", json=body)
+        return Chat.model_validate(data)
 
     async def delete_chat(self, chat_id: int) -> bool:
         """Delete a group chat. Returns ``True`` on success."""
-        return await self(DeleteChat(chat_id=chat_id))
+        data = await self._request("DELETE", f"/chats/{chat_id}")
+        return _success(data)
 
     async def send_chat_action(
         self,
@@ -296,11 +272,17 @@ class Bot:
         action: ChatAction | str,
     ) -> bool:
         """Send a typing/activity indicator to a chat."""
-        return await self(SendChatAction(chat_id=chat_id, action=action))
+        data = await self._request(
+            "POST", f"/chats/{chat_id}/actions", json={"action": str(action)}
+        )
+        return _success(data)
 
     async def get_pinned_message(self, chat_id: int) -> Message | None:
         """Return the pinned message in a chat, or ``None`` if not set."""
-        return await self(GetPinnedMessage(chat_id=chat_id))
+        data = await self._request("GET", f"/chats/{chat_id}/pin")
+        if not isinstance(data, dict) or data.get("message") is None:
+            return None
+        return Message.model_validate(data["message"])
 
     async def pin_message(
         self,
@@ -310,11 +292,17 @@ class Bot:
         notify: bool = True,
     ) -> bool:
         """Pin a message in a chat."""
-        return await self(PinMessage(chat_id=chat_id, message_id=message_id, notify=notify))
+        data = await self._request(
+            "PUT",
+            f"/chats/{chat_id}/pin",
+            json={"message_id": message_id, "notify": notify},
+        )
+        return _success(data)
 
     async def unpin_message(self, chat_id: int) -> bool:
         """Unpin the pinned message in a chat."""
-        return await self(UnpinMessage(chat_id=chat_id))
+        data = await self._request("DELETE", f"/chats/{chat_id}/pin")
+        return _success(data)
 
     async def get_chat_members(
         self,
@@ -325,13 +313,25 @@ class Bot:
         user_ids: list[int] | None = None,
     ) -> ChatMemberList:
         """List members of a chat with pagination."""
-        return await self(GetChatMembers(
-            chat_id=chat_id, count=count, marker=marker, user_ids=user_ids
-        ))
+        data = await self._request(
+            "GET",
+            f"/chats/{chat_id}/members",
+            params={
+                "count": count,
+                "marker": marker,
+                "user_ids": ",".join(str(i) for i in user_ids) if user_ids else None,
+            },
+        )
+        return ChatMemberList.model_validate(data)
 
     async def add_chat_members(self, chat_id: int, user_ids: list[int]) -> bool:
         """Add users to a chat."""
-        return await self(AddChatMembers(chat_id=chat_id, user_ids=user_ids))
+        data = await self._request(
+            "POST",
+            f"/chats/{chat_id}/members",
+            json={"user_ids": user_ids},
+        )
+        return _success(data)
 
     async def remove_chat_member(
         self,
@@ -341,15 +341,22 @@ class Bot:
         block: bool = False,
     ) -> bool:
         """Remove a user from a chat."""
-        return await self(RemoveChatMember(chat_id=chat_id, user_id=user_id, block=block))
+        data = await self._request(
+            "DELETE",
+            f"/chats/{chat_id}/members",
+            params={"user_id": user_id, "block": block},
+        )
+        return _success(data)
 
     async def get_bot_chat_membership(self, chat_id: int) -> ChatMember:
         """Check the bot's own membership status in a chat."""
-        return await self(GetBotChatMembership(chat_id=chat_id))
+        data = await self._request("GET", f"/chats/{chat_id}/members/me")
+        return ChatMember.model_validate(data)
 
     async def leave_chat(self, chat_id: int) -> bool:
         """Remove the bot from a chat."""
-        return await self(LeaveChat(chat_id=chat_id))
+        data = await self._request("DELETE", f"/chats/{chat_id}/members/me")
+        return _success(data)
 
     async def get_chat_admins(
         self,
@@ -359,11 +366,18 @@ class Bot:
         marker: int | None = None,
     ) -> list[ChatMember]:
         """List administrators of a chat."""
-        return await self(GetChatAdmins(chat_id=chat_id, count=count, marker=marker))
+        data = await self._request(
+            "GET",
+            f"/chats/{chat_id}/members/admins",
+            params={"count": count, "marker": marker},
+        )
+        members = data.get("members", []) if isinstance(data, dict) else []
+        return [ChatMember.model_validate(m) for m in members]
 
     async def get_chat_by_link(self, chat_link: str) -> Chat:
         """Get chat or channel info by its public link (e.g. ``@channelname``)."""
-        return await self(GetChatByLink(chat_link=chat_link))
+        data = await self._request("GET", f"/chats/{chat_link}")
+        return Chat.model_validate(data)
 
     async def add_chat_admin(
         self,
@@ -373,15 +387,25 @@ class Bot:
         permissions: list[str] | None = None,
     ) -> bool:
         """Grant admin rights to a chat member."""
-        return await self(AddChatAdmin(chat_id=chat_id, user_id=user_id, permissions=permissions))
+        admin: dict[str, Any] = {"user_id": user_id}
+        if permissions is not None:
+            admin["permissions"] = permissions
+        data = await self._request(
+            "POST",
+            f"/chats/{chat_id}/members/admins",
+            json={"admins": [admin]},
+        )
+        return _success(data)
 
     async def remove_chat_admin(self, chat_id: int, user_id: int) -> bool:
         """Revoke admin rights from a chat member."""
-        return await self(RemoveChatAdmin(chat_id=chat_id, user_id=user_id))
+        data = await self._request("DELETE", f"/chats/{chat_id}/members/admins/{user_id}")
+        return _success(data)
 
     async def get_subscriptions(self) -> SubscriptionList:
         """List all active webhook subscriptions."""
-        return await self(GetSubscriptions())
+        data = await self._request("GET", "/subscriptions")
+        return SubscriptionList.model_validate(data)
 
     async def subscribe(
         self,
@@ -392,15 +416,25 @@ class Bot:
         secret: str | None = None,
     ) -> bool:
         """Subscribe to bot events via webhook. Returns ``True`` on success."""
-        return await self(Subscribe(url=url, update_types=update_types, version=version, secret=secret))
+        body: dict[str, Any] = {"url": url}
+        if update_types is not None:
+            body["update_types"] = update_types
+        if version is not None:
+            body["version"] = version
+        if secret is not None:
+            body["secret"] = secret
+        data = await self._request("POST", "/subscriptions", json=body)
+        return _success(data)
 
     async def unsubscribe(self, url: str) -> bool:
         """Remove a webhook subscription by URL."""
-        return await self(Unsubscribe(url=url))
+        data = await self._request("DELETE", "/subscriptions", params={"url": url})
+        return _success(data)
 
     async def get_video_info(self, video_token: str) -> VideoInfo:
         """Fetch metadata for an uploaded video."""
-        return await self(GetVideoInfo(video_token=video_token))
+        data = await self._request("GET", f"/videos/{video_token}")
+        return VideoInfo.model_validate(data)
 
     async def get_updates(
         self,
@@ -411,23 +445,24 @@ class Bot:
         types: list[str] | None = None,
     ) -> UpdateList:
         """Long-poll the API for new updates."""
-        return await self(GetUpdates(limit=limit, timeout=timeout, marker=marker, types=types))
+        data = await self._request(
+            "GET",
+            "/updates",
+            params={
+                "limit": limit,
+                "timeout": timeout,
+                "marker": marker,
+                "types": ",".join(types) if types else None,
+            },
+        )
+        return UpdateList.model_validate(data)
 
     async def upload(
         self,
-        file: Annotated[
-            bytes | IO[bytes] | Path,
-            Doc("File content as bytes, a file-like object, or a Path."),
-        ],
-        upload_type: Annotated[
-            UploadType | str,
-            Doc("Media type: image, video, audio, or file."),
-        ],
+        file: bytes | IO[bytes] | Path,
+        upload_type: UploadType | str,
         *,
-        filename: Annotated[
-            str | None,
-            Doc("Override the filename sent to the server."),
-        ] = None,
+        filename: str | None = None,
     ) -> str:
         """Upload a file and return an upload token for use in attachments.
 

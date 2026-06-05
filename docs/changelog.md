@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.5.0] — 2026-06-05
+
+### Добавлено
+
+- Методы для управления чатами, закрепами, участниками, администраторами и членством бота.
+- Методы webhook subscriptions: `get_subscriptions`, `subscribe`, `unsubscribe`.
+- Метод `get_video_info`.
+- Экспорт новых типов из `maxio`: `ChatAction`, `ChatMemberRole`, `ChatList`,
+  `ChatMember`, `ChatMemberList`, `Subscription`, `SubscriptionList`, `VideoInfo`.
+- Примеры: `chat_tools_bot.py`, `media_upload_bot.py`, `webhooks_bot.py`.
+
+### Изменено
+
+- API host: `https://platform-api.max.ru`.
+- Авторизация: только `Authorization` header, без `access_token` в query.
+- `Bot` стал прямым HTTP-клиентом без `maxio.methods` / `MaxMethod`.
+- `get_chats()` возвращает `ChatList` с `chats` и `marker`.
+- Маскирование токена в логах всегда включено.
+- HTTP client инкапсулирован; внешний `client` больше не часть публичного API.
+
+### Исправлено
+
+- `get_pinned_message()` корректно обрабатывает `{"message": null}`.
+- Примеры обновлены под текущий API и `MAX_TOKEN`.
+- Upload-flow сверён с официальной двухшаговой схемой.
+
+### Удалено
+
+- Удалены `maxio.methods`, `MaxMethod`, `MaxRequest`.
+- Удалены параметры `client` и `mask_token_in_logs` из `Bot`.
+- Удалён параметр `mask_token_in_logs` из `MaxBot`.
+- Удалён неиспользуемый `_docs.Doc` / `typing.Annotated` metadata layer.
+
 ## [0.4.0] — 2026-05-29
 
 ### Добавлено

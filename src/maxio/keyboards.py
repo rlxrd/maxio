@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Any
 
-from maxio._docs import Doc
 from maxio.enums import ButtonType, Intent
 
 ButtonDict = dict[str, Any]
@@ -13,13 +12,10 @@ class Button:
 
     @staticmethod
     def callback(
-        text: Annotated[str, Doc("Button label.")],
-        payload: Annotated[str, Doc("Callback data delivered to the bot when pressed.")],
+        text: str,
+        payload: str,
         *,
-        intent: Annotated[
-            Intent | str,
-            Doc("Visual style of the button (positive / negative / default)."),
-        ] = Intent.DEFAULT,
+        intent: Intent | str = Intent.DEFAULT,
     ) -> ButtonDict:
         """Create a callback button."""
         return {
@@ -31,24 +27,24 @@ class Button:
 
     @staticmethod
     def link(
-        text: Annotated[str, Doc("Button label.")],
-        url: Annotated[str, Doc("URL to open when the button is pressed.")],
+        text: str,
+        url: str,
     ) -> ButtonDict:
         """Create a link button."""
         return {"type": ButtonType.LINK.value, "text": text, "url": url}
 
     @staticmethod
     def request_contact(
-        text: Annotated[str, Doc("Button label.")],
+        text: str,
     ) -> ButtonDict:
         """Create a button that requests the user's contact."""
         return {"type": ButtonType.REQUEST_CONTACT.value, "text": text}
 
     @staticmethod
     def request_geo_location(
-        text: Annotated[str, Doc("Button label.")],
+        text: str,
         *,
-        quick: Annotated[bool, Doc("Send location without a confirmation dialog.")] = False,
+        quick: bool = False,
     ) -> ButtonDict:
         """Create a button that requests the user's geo location."""
         return {
@@ -59,18 +55,18 @@ class Button:
 
     @staticmethod
     def message(
-        text: Annotated[str, Doc("Button label and the message text to send on press.")],
+        text: str,
     ) -> ButtonDict:
         """Create a button that sends a text message when pressed."""
         return {"type": ButtonType.MESSAGE.value, "text": text}
 
     @staticmethod
     def chat(
-        text: Annotated[str, Doc("Button label.")],
-        chat_title: Annotated[str, Doc("Title of the chat to create.")],
+        text: str,
+        chat_title: str,
         *,
-        chat_description: Annotated[str | None, Doc("Optional chat description.")] = None,
-        start_payload: Annotated[str | None, Doc("Payload sent when the chat starts.")] = None,
+        chat_description: str | None = None,
+        start_payload: str | None = None,
     ) -> ButtonDict:
         """Create a button that opens a new chat."""
         button: ButtonDict = {
