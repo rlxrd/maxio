@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Any
 
 _PATTERNS = (
     re.compile(r"(access_token=)[^&\s\"']+"),
@@ -19,6 +20,19 @@ def _mask(text: str) -> str:
     return text
 
 
+def _mask_arg(a: Any) -> Any:
+    """Mask token in a log argument regardless of its type.
+
+    httpx passes URL objects (not plain str) as log record args — converting
+    to str first ensures the token is always redacted.
+    """
+    if isinstance(a, str):
+        return _mask(a)
+    s = str(a)
+    masked = _mask(s)
+    return masked if masked != s else a
+
+
 class TokenMaskingFilter(logging.Filter):
     """Masks bot token (``access_token=...``, ``Authorization: ...``) in log records."""
 
@@ -27,22 +41,22 @@ class TokenMaskingFilter(logging.Filter):
             record.msg = _mask(record.msg)
         if record.args:
             if isinstance(record.args, dict):
-                record.args = {
-                    k: _mask(v) if isinstance(v, str) else v
-                    for k, v in record.args.items()
-                }
+                record.args = {k: _mask_arg(v) for k, v in record.args.items()}
             else:
-                record.args = tuple(
-                    _mask(a) if isinstance(a, str) else a for a in record.args
-                )
+                record.args = tuple(_mask_arg(a) for a in record.args)
         return True
 
 
-def install_token_masking(logger_name: str = "httpx") -> None:
-    """Attach a token-masking filter to the given logger (no-op if already installed)."""
-    logger = logging.getLogger(logger_name)
-    if any(getattr(f, _FILTER_FLAG, False) for f in logger.filters):
-        return
-    flt = TokenMaskingFilter()
-    setattr(flt, _FILTER_FLAG, True)
-    logger.addFilter(flt)
+def install_token_masking(*logger_names: str) -> None:
+    """Attach a token-masking filter to the given loggers (no-op if already installed).
+
+    Defaults to both ``httpx`` and ``httpcore`` so DEBUG-level URL logs are
+    also masked.
+    """
+    for name in logger_names or ("httpx", "httpcore"):
+        lg = logging.getLogger(name)
+        if any(getattr(f, _FILTER_FLAG, False) for f in lg.filters):
+            continue
+        flt = TokenMaskingFilter()
+        setattr(flt, _FILTER_FLAG, True)
+        lg.addFilter(flt)

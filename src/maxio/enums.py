@@ -84,3 +84,23 @@ class UploadType(StrEnum):
     VIDEO = "video"
     AUDIO = "audio"
     FILE = "file"
+
+
+class ChatAction(StrEnum):
+    """Typing/activity indicator action sent via ``POST /chats/{chatId}/actions``."""
+
+    TYPING_ON = "typing_on"
+    TYPING_OFF = "typing_off"
+    SENDING_PHOTO = "sending_photo"
+    SENDING_VIDEO = "sending_video"
+    SENDING_AUDIO = "sending_audio"
+    SENDING_FILE = "sending_file"
+    MARK_SEEN = "mark_seen"
+
+
+class ChatMemberRole(StrEnum):
+    """Role of a member inside a chat."""
+
+    OWNER = "owner"
+    ADMIN = "admin"
+    MEMBER = "member"
